@@ -25,6 +25,14 @@ jobs:
         with:
           packages: 'platforms;android-36.1 build-tools;36.1.0'
 
+      - name: Restore missing Gradle wrapper JAR
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -fsSL https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar \
+              -o gradle/wrapper/gradle-wrapper.jar
+          fi
+          test -s gradle/wrapper/gradle-wrapper.jar
+
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
