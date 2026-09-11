@@ -32,11 +32,8 @@ jobs:
         with:
           gradle-version: 9.3.1
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Debug APK using Gradle directly
+        run: gradle assembleDebug
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
