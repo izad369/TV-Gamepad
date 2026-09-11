@@ -1,0 +1,6 @@
+{
+  "name": "TV Gamepad",
+  "description": "Wireless Bluetooth HID gamepad and TV remote connecting seamlessly to Android TV to control all installed games and TV navigation with auto-orientation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
