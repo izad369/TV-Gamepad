@@ -17,14 +17,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Download Gradle Wrapper
+        run: |
+          mkdir -p gradle/wrapper
+          curl -L https://services.gradle.org/distributions/gradle-9.3.1-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
