@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,19 +26,26 @@ jobs:
         with:
           packages: 'platforms;android-36.1 build-tools;36.1.0'
 
-      - name: Restore missing Gradle wrapper JAR
-        run: |
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -fsSL https://raw.githubusercontent.com/gradle/gradle/v9.3.1/gradle/wrapper/gradle-wrapper.jar \
-              -o gradle/wrapper/gradle-wrapper.jar
-          fi
-          test -s gradle/wrapper/gradle-wrapper.jar
+      # Do not use ./gradlew here.
+      # The repository is missing gradle/wrapper/gradle-wrapper.jar,
+      # which causes GradleWrapperMain ClassNotFoundException.
+      # setup-gradle installs the exact Gradle version directly.
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+          cache-provider: basic
 
-      - name: Make Gradle executable
-        run: chmod +x ./gradlew
+      - name: Check Gradle installation
+        run: gradle --version
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK exists
+        run: |
+          echo "APK files:"
+          find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
