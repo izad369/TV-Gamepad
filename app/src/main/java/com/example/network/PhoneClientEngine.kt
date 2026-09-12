@@ -38,335 +38,135 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
 
-class PhoneClientEngine(
-    private val context: Context,
-    private val scope: CoroutineScope
-) : SensorEventListener {
-
+class PhoneClientEngine(private val context: Context, private val scope: CoroutineScope) : SensorEventListener {
     private var tcpSocket: Socket? = null
     private var tcpWriter: PrintWriter? = null
     private var btSocket: BluetoothSocket? = null
     private var btWriter: PrintWriter? = null
-
-    private var readJob: Job? = null
     private var pingJob: Job? = null
     private var discoveryJob: Job? = null
     private val writeMutex = Mutex()
 
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
-
     private val _connectionType = MutableStateFlow(ConnectionType.WIFI)
     val connectionType: StateFlow<ConnectionType> = _connectionType.asStateFlow()
-
     private val _connectedHostName = MutableStateFlow("")
     val connectedHostName: StateFlow<String> = _connectedHostName.asStateFlow()
-
     private val _pingMs = MutableStateFlow<Long>(0)
     val pingMs: StateFlow<Long> = _pingMs.asStateFlow()
-
     private val _discoveredHosts = MutableStateFlow<List<DiscoveredHost>>(emptyList())
     val discoveredHosts: StateFlow<List<DiscoveredHost>> = _discoveredHosts.asStateFlow()
-
     private val _currentState = MutableStateFlow(GamepadInputState())
     val currentState: StateFlow<GamepadInputState> = _currentState.asStateFlow()
 
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
     private var isMotionControlEnabled = false
-
     val hidManager = BluetoothHidManager(context, scope)
 
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-            vibratorManager?.defaultVibrator
+            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
         } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            @Suppress("DEPRECATION") context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
     }
 
     init {
-        try {
-            sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-            accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     }
 
     fun setMotionControlsEnabled(enabled: Boolean) {
         isMotionControlEnabled = enabled
-        if (enabled) {
-            accelerometer?.let {
-                sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-            }
-        } else {
-            sensorManager?.unregisterListener(this)
-            sendTilt(0f, 0f)
-        }
+        if (enabled) accelerometer?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        else { sensorManager?.unregisterListener(this); sendTilt(0f, 0f) }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (!isMotionControlEnabled || event == null) return
-        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
-            val rawX = (event.values[1] / 7.0f).coerceIn(-1f, 1f)
-            val rawY = (-event.values[0] / 7.0f).coerceIn(-1f, 1f)
-            sendTilt(rawX, rawY)
-        }
+        if (!isMotionControlEnabled || event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+        sendTilt((event.values[1] / 7f).coerceIn(-1f, 1f), (-event.values[0] / 7f).coerceIn(-1f, 1f))
     }
-
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     fun triggerHaptic(durationMs: Long = 25) {
-        try {
-            vibrator?.let { v ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    v.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    v.vibrate(durationMs)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        try { vibrator?.let { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) it.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)) else @Suppress("DEPRECATION") it.vibrate(durationMs) } } catch (_: Exception) {}
     }
 
     fun startDiscovery() {
-        stopDiscovery()
-        _discoveredHosts.value = emptyList()
+        stopDiscovery(); _discoveredHosts.value = emptyList()
         discoveryJob = scope.launch(Dispatchers.IO) {
             val lock = NetworkUtils.acquireMulticastLock(context)
             try {
-                val udpSocket = DatagramSocket()
-                udpSocket.broadcast = true
-                udpSocket.soTimeout = 2000
-                val broadcastAddr = NetworkUtils.getBroadcastAddress()
-                val sendData = ProtocolSerializer.DISCOVERY_MAGIC.toByteArray()
-                val sendPacket = DatagramPacket(sendData, sendData.size, broadcastAddr, ProtocolSerializer.DISCOVERY_PORT)
-                val sendPacketGeneric = DatagramPacket(sendData, sendData.size, java.net.InetAddress.getByName("255.255.255.255"), ProtocolSerializer.DISCOVERY_PORT)
-                while (isActive) {
-                    try {
-                        udpSocket.send(sendPacket)
-                        udpSocket.send(sendPacketGeneric)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                    val buffer = ByteArray(512)
-                    val recvPacket = DatagramPacket(buffer, buffer.size)
-                    try {
-                        udpSocket.receive(recvPacket)
-                        val reply = String(recvPacket.data, 0, recvPacket.length).trim()
-                        if (reply.startsWith(ProtocolSerializer.DISCOVERY_ACK_PREFIX)) {
-                            val payload = reply.removePrefix(ProtocolSerializer.DISCOVERY_ACK_PREFIX)
-                            val parts = payload.split(":")
-                            val tvName = parts.getOrNull(0) ?: "TV Console"
-                            val port = parts.getOrNull(1)?.toIntOrNull() ?: ProtocolSerializer.DEFAULT_PORT
-                            val pin = parts.getOrNull(2) ?: ""
-                            val playersCount = parts.getOrNull(3)?.toIntOrNull() ?: 0
-                            val hostIp = recvPacket.address.hostAddress ?: "127.0.0.1"
-                            val host = DiscoveredHost(tvName, hostIp, port, pin, playersCount)
-                            val list = _discoveredHosts.value.toMutableList()
-                            val idx = list.indexOfFirst { it.ipAddress == hostIp && it.port == port }
-                            if (idx >= 0) list[idx] = host else list.add(host)
-                            _discoveredHosts.value = list
+                DatagramSocket().use { udp ->
+                    udp.broadcast = true; udp.soTimeout = 2000
+                    val data = ProtocolSerializer.DISCOVERY_MAGIC.toByteArray()
+                    val targets = listOf(NetworkUtils.getBroadcastAddress(), java.net.InetAddress.getByName("255.255.255.255"))
+                    while (isActive) {
+                        targets.forEach { runCatching { udp.send(DatagramPacket(data, data.size, it, ProtocolSerializer.DISCOVERY_PORT)) } }
+                        val packet = DatagramPacket(ByteArray(512), 512)
+                        runCatching { udp.receive(packet) }.onSuccess {
+                            val reply = String(packet.data, 0, packet.length).trim()
+                            if (reply.startsWith(ProtocolSerializer.DISCOVERY_ACK_PREFIX)) {
+                                val p = reply.removePrefix(ProtocolSerializer.DISCOVERY_ACK_PREFIX).split(":")
+                                val hostIp = packet.address.hostAddress ?: "127.0.0.1"
+                                val host = DiscoveredHost(p.getOrNull(0) ?: "TV Console", hostIp, p.getOrNull(1)?.toIntOrNull() ?: ProtocolSerializer.DEFAULT_PORT, p.getOrNull(2) ?: "", p.getOrNull(3)?.toIntOrNull() ?: 0)
+                                _discoveredHosts.value = _discoveredHosts.value.toMutableList().apply { val i = indexOfFirst { it.ipAddress == hostIp && it.port == host.port }; if (i >= 0) this[i] = host else add(host) }
+                            }
                         }
-                    } catch (_: Exception) {
-                        // socket timeout
+                        delay(1200)
                     }
-                    delay(1200)
                 }
-                udpSocket.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                try { lock?.release() } catch (_: Exception) {}
-            }
+            } finally { runCatching { lock?.release() } }
         }
     }
-
-    fun stopDiscovery() {
-        discoveryJob?.cancel()
-        discoveryJob = null
-    }
+    fun stopDiscovery() { discoveryJob?.cancel(); discoveryJob = null }
 
     fun connectWifi(ip: String, port: Int = ProtocolSerializer.DEFAULT_PORT, hostName: String = "TV") {
-        disconnect()
-        _connectionType.value = ConnectionType.WIFI
-        _connectionStatus.value = ConnectionStatus.CONNECTING
-        _connectedHostName.value = hostName
+        disconnect(); _connectionType.value = ConnectionType.WIFI; _connectionStatus.value = ConnectionStatus.CONNECTING; _connectedHostName.value = hostName
         scope.launch(Dispatchers.IO) {
             try {
-                val socket = Socket()
-                socket.tcpNoDelay = true
-                socket.connect(InetSocketAddress(ip, port), 4000)
-                tcpSocket = socket
-                tcpWriter = PrintWriter(socket.getOutputStream(), true)
-                _connectionStatus.value = ConnectionStatus.CONNECTED
-                startPingLoop { t -> sendRaw(ProtocolSerializer.encodePing(t)) }
-                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                while (isActive && socket.isConnected && !socket.isClosed) {
-                    val line = reader.readLine() ?: break
-                    processIncomingLine(line)
-                }
-            } catch (e: Exception) {
-                if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) {
-                    _connectionStatus.value = ConnectionStatus.ERROR
-                }
-            } finally {
-                disconnect()
-            }
+                val socket = Socket(); socket.tcpNoDelay = true; socket.connect(InetSocketAddress(ip, port), 4000); tcpSocket = socket; tcpWriter = PrintWriter(socket.getOutputStream(), true)
+                _connectionStatus.value = ConnectionStatus.CONNECTED; startPingLoop()
+                BufferedReader(InputStreamReader(socket.getInputStream())).use { reader -> while (isActive && socket.isConnected && !socket.isClosed) { val line = reader.readLine() ?: break; processIncomingLine(line) } }
+            } catch (_: Exception) { if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) _connectionStatus.value = ConnectionStatus.ERROR } finally { disconnect() }
         }
     }
 
     fun connectBluetooth(device: BluetoothDevice) {
-        disconnect()
-        _connectionType.value = ConnectionType.BLUETOOTH
-        _connectionStatus.value = ConnectionStatus.CONNECTING
-        _connectedHostName.value = try { device.name ?: "BT TV" } catch (_: SecurityException) { "BT TV" }
+        disconnect(); _connectionType.value = ConnectionType.BLUETOOTH; _connectionStatus.value = ConnectionStatus.CONNECTING; _connectedHostName.value = try { device.name ?: "BT TV" } catch (_: SecurityException) { "BT TV" }
         scope.launch(Dispatchers.IO) {
             try {
-                val uuid = UUID.fromString(ProtocolSerializer.BT_UUID_STRING)
-                val socket = device.createRfcommSocketToServiceRecord(uuid)
-                btSocket = socket
-                socket.connect()
-                btWriter = PrintWriter(socket.outputStream, true)
-                _connectionStatus.value = ConnectionStatus.CONNECTED
-                startPingLoop { t -> sendRaw(ProtocolSerializer.encodePing(t)) }
-                val reader = BufferedReader(InputStreamReader(socket.inputStream))
-                while (isActive && socket.isConnected && !socket.isClosed) {
-                    val line = reader.readLine() ?: break
-                    processIncomingLine(line)
-                }
-            } catch (e: Exception) {
-                if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) {
-                    _connectionStatus.value = ConnectionStatus.ERROR
-                }
-            } finally {
-                disconnect()
-            }
+                val socket = device.createRfcommSocketToServiceRecord(UUID.fromString(ProtocolSerializer.BT_UUID_STRING)); btSocket = socket; socket.connect(); btWriter = PrintWriter(socket.outputStream, true)
+                _connectionStatus.value = ConnectionStatus.CONNECTED; startPingLoop()
+                BufferedReader(InputStreamReader(socket.inputStream)).use { reader -> while (isActive && socket.isConnected) { val line = reader.readLine() ?: break; processIncomingLine(line) } }
+            } catch (_: Exception) { if (_connectionStatus.value != ConnectionStatus.DISCONNECTED) _connectionStatus.value = ConnectionStatus.ERROR } finally { disconnect() }
         }
     }
 
-    fun getPairedBluetoothDevices(): List<BluetoothDevice> {
-        return try {
-            val adapter = BluetoothAdapter.getDefaultAdapter()
-            if (adapter?.isEnabled == true) adapter.bondedDevices?.toList() ?: emptyList() else emptyList()
-        } catch (_: SecurityException) {
-            emptyList()
-        }
-    }
+    fun getPairedBluetoothDevices(): List<BluetoothDevice> = try { BluetoothAdapter.getDefaultAdapter()?.takeIf { it.isEnabled }?.bondedDevices?.toList() ?: emptyList() } catch (_: SecurityException) { emptyList() }
 
-    private fun startPingLoop(sendPing: (Long) -> Unit) {
-        pingJob?.cancel()
-        pingJob = scope.launch(Dispatchers.IO) {
-            while (isActive && _connectionStatus.value == ConnectionStatus.CONNECTED) {
-                try { sendPing(System.currentTimeMillis()) } catch (_: Exception) {}
-                delay(1500)
-            }
-        }
-    }
-
-    private fun processIncomingLine(line: String) {
-        val trimmed = line.trim()
-        if (trimmed.startsWith("PONG:")) {
-            val sentTime = trimmed.removePrefix("PONG:").toLongOrNull() ?: 0L
-            if (sentTime > 0) _pingMs.value = (System.currentTimeMillis() - sentTime).coerceAtLeast(1)
-        }
-    }
+    private fun startPingLoop() { pingJob?.cancel(); pingJob = scope.launch(Dispatchers.IO) { while (isActive && _connectionStatus.value == ConnectionStatus.CONNECTED) { sendRaw(ProtocolSerializer.encodePing(System.currentTimeMillis())); delay(1500) } } }
+    private fun processIncomingLine(line: String) { if (line.trim().startsWith("PONG:")) line.trim().removePrefix("PONG:").toLongOrNull()?.let { _pingMs.value = (System.currentTimeMillis() - it).coerceAtLeast(1) } }
 
     fun onButtonEvent(button: GameButton, pressed: Boolean) {
         if (pressed) triggerHaptic(20)
-        val currentButtons = _currentState.value.pressedButtons.toMutableSet()
-        if (pressed) currentButtons.add(button) else currentButtons.remove(button)
-        _currentState.value = _currentState.value.copy(
-            pressedButtons = currentButtons,
-            timestamp = System.currentTimeMillis()
-        )
-        hidManager.sendGamepadReport(
-            currentButtons,
-            _currentState.value.stickX,
-            _currentState.value.stickY,
-            _currentState.value.rightStickX,
-            _currentState.value.rightStickY,
-            _currentState.value.l2Value,
-            _currentState.value.r2Value
-        )
+        val buttons = _currentState.value.pressedButtons.toMutableSet().apply { if (pressed) add(button) else remove(button) }
+        _currentState.value = _currentState.value.copy(pressedButtons = buttons, timestamp = System.currentTimeMillis())
+        hidManager.sendGamepadReport(buttons, _currentState.value.stickX, _currentState.value.stickY, _currentState.value.rightStickX, _currentState.value.rightStickY, _currentState.value.l2Value, _currentState.value.r2Value)
         sendRaw(ProtocolSerializer.encodeButton(button, pressed))
     }
+    fun onStickMove(x: Float, y: Float) { _currentState.value = _currentState.value.copy(stickX=x, stickY=y, timestamp=System.currentTimeMillis()); hidManager.sendGamepadReport(_currentState.value.pressedButtons,x,y,_currentState.value.rightStickX,_currentState.value.rightStickY,_currentState.value.l2Value,_currentState.value.r2Value); sendRaw(ProtocolSerializer.encodeStick(x,y)) }
+    fun onRightStickMove(x: Float, y: Float) { _currentState.value = _currentState.value.copy(rightStickX=x,rightStickY=y,timestamp=System.currentTimeMillis()); hidManager.sendGamepadReport(_currentState.value.pressedButtons,_currentState.value.stickX,_currentState.value.stickY,x,y,_currentState.value.l2Value,_currentState.value.r2Value); sendRaw(ProtocolSerializer.encodeRightStick(x,y)) }
+    fun onTriggersMove(l2: Float, r2: Float) { _currentState.value = _currentState.value.copy(l2Value=l2,r2Value=r2,timestamp=System.currentTimeMillis()); hidManager.sendGamepadReport(_currentState.value.pressedButtons,_currentState.value.stickX,_currentState.value.stickY,_currentState.value.rightStickX,_currentState.value.rightStickY,l2,r2); sendRaw(ProtocolSerializer.encodeTriggers(l2,r2)) }
+    fun onRemoteKeyEvent(key: com.example.model.TvRemoteKey, pressed: Boolean) { if (pressed) triggerHaptic(25); hidManager.sendRemoteKey(key,pressed); sendRaw(ProtocolSerializer.encodeRemoteKey(key,pressed)) }
+    private fun sendTilt(tx: Float, ty: Float) { _currentState.value = _currentState.value.copy(tiltX=tx,tiltY=ty,timestamp=System.currentTimeMillis()); sendRaw(ProtocolSerializer.encodeTilt(tx,ty)) }
 
-    fun onStickMove(x: Float, y: Float) {
-        _currentState.value = _currentState.value.copy(stickX = x, stickY = y, timestamp = System.currentTimeMillis())
-        hidManager.sendGamepadReport(
-            _currentState.value.pressedButtons, x, y,
-            _currentState.value.rightStickX, _currentState.value.rightStickY,
-            _currentState.value.l2Value, _currentState.value.r2Value
-        )
-        sendRaw(ProtocolSerializer.encodeStick(x, y))
-    }
-
-    fun onRightStickMove(x: Float, y: Float) {
-        _currentState.value = _currentState.value.copy(rightStickX = x, rightStickY = y, timestamp = System.currentTimeMillis())
-        hidManager.sendGamepadReport(
-            _currentState.value.pressedButtons,
-            _currentState.value.stickX, _currentState.value.stickY,
-            x, y, _currentState.value.l2Value, _currentState.value.r2Value
-        )
-        sendRaw(ProtocolSerializer.encodeRightStick(x, y))
-    }
-
-    fun onTriggersMove(l2: Float, r2: Float) {
-        _currentState.value = _currentState.value.copy(l2Value = l2, r2Value = r2, timestamp = System.currentTimeMillis())
-        hidManager.sendGamepadReport(
-            _currentState.value.pressedButtons,
-            _currentState.value.stickX, _currentState.value.stickY,
-            _currentState.value.rightStickX, _currentState.value.rightStickY,
-            l2, r2
-        )
-        sendRaw(ProtocolSerializer.encodeTriggers(l2, r2))
-    }
-
-    fun onRemoteKeyEvent(key: com.example.model.TvRemoteKey, pressed: Boolean) {
-        if (pressed) triggerHaptic(25)
-        hidManager.sendRemoteKey(key, pressed)
-        sendRaw(ProtocolSerializer.encodeRemoteKey(key, pressed))
-    }
-
-    private fun sendTilt(tx: Float, ty: Float) {
-        _currentState.value = _currentState.value.copy(tiltX = tx, tiltY = ty, timestamp = System.currentTimeMillis())
-        sendRaw(ProtocolSerializer.encodeTilt(tx, ty))
-    }
-
-    /** Sends exactly one newline-delimited frame and serializes all writers. */
     private fun sendRaw(msg: String) {
         if (_connectionStatus.value != ConnectionStatus.CONNECTED) return
-        scope.launch(Dispatchers.IO) {
-            writeMutex.withLock {
-                try {
-                    val line = msg.trimEnd('\r', '\n')
-                    tcpWriter?.println(line)
-                    tcpWriter?.flush()
-                    btWriter?.println(line)
-                    btWriter?.flush()
-                } catch (_: Exception) {
-                    // Ignore transient write error
-                }
-            }
-        }
+        scope.launch(Dispatchers.IO) { writeMutex.withLock { try { val line=msg.trimEnd('\r','\n'); tcpWriter?.println(line); btWriter?.println(line); tcpWriter?.flush(); btWriter?.flush() } catch (_: Exception) {} } }
     }
 
-    fun disconnect() {
-        pingJob?.cancel()
-        pingJob = null
-        try { tcpSocket?.close() } catch (_: Exception) {}
-        try { btSocket?.close() } catch (_: Exception) {}
-        tcpSocket = null
-        tcpWriter = null
-        btSocket = null
-        btWriter = null
-        _connectionStatus.value = ConnectionStatus.DISCONNECTED
-        _pingMs.value = 0
-    }
+    fun disconnect() { pingJob?.cancel(); pingJob=null; runCatching { tcpSocket?.close() }; runCatching { btSocket?.close() }; tcpSocket=null; tcpWriter=null; btSocket=null; btWriter=null; _connectionStatus.value=ConnectionStatus.DISCONNECTED; _pingMs.value=0 }
 }
