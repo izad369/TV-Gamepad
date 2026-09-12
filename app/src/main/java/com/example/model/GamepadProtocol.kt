@@ -20,7 +20,6 @@ enum class GameButton(val label: String) {
     START("START"),
     MENU("MENU"),
     HOME("HOME"),
-    // Secondary Directional cluster
     D2_UP("▲2"),
     D2_DOWN("▼2"),
     D2_LEFT("◀2"),
@@ -109,45 +108,37 @@ data class ControllerPlayer(
 )
 
 /**
- * High-speed wire protocol encoder / decoder for Wi-Fi and Bluetooth.
- * Extremely low latency, zero overhead.
+ * Wire protocol encoder / decoder for Wi-Fi and Bluetooth.
+ * Every packet is one newline-delimited frame.
  */
 object ProtocolSerializer {
     const val DEFAULT_PORT = 8888
     const val DISCOVERY_PORT = 8889
     const val DISCOVERY_MAGIC = "TV_GAMEPAD_DISCOVERY"
     const val DISCOVERY_ACK_PREFIX = "TV_GAMEPAD_HOST:"
-    const val BT_UUID_STRING = "00001101-0000-1000-8000-00805F9B34FB" // Standard SerialPort SPP
+    const val BT_UUID_STRING = "00001101-0000-1000-8000-00805F9B34FB"
 
-    fun encodeButton(button: GameButton, pressed: Boolean): String {
-        return "B:${button.name}:${if (pressed) 1 else 0}\n"
-    }
+    private fun frame(payload: String): String = "$payload\n"
 
-    fun encodeStick(x: Float, y: Float): String {
-        return "S:%.2f:%.2f\n".format(x, y)
-    }
+    fun encodeButton(button: GameButton, pressed: Boolean): String =
+        frame("B:${button.name}:${if (pressed) 1 else 0}")
 
-    fun encodeRightStick(x: Float, y: Float): String {
-        return "RS:%.2f:%.2f\n".format(x, y)
-    }
+    fun encodeStick(x: Float, y: Float): String =
+        frame("S:${"%.2f".format(java.util.Locale.US, x)}:${"%.2f".format(java.util.Locale.US, y)}")
 
-    fun encodeTilt(tiltX: Float, tiltY: Float): String {
-        return "T:%.2f:%.2f\n".format(tiltX, tiltY)
-    }
+    fun encodeRightStick(x: Float, y: Float): String =
+        frame("RS:${"%.2f".format(java.util.Locale.US, x)}:${"%.2f".format(java.util.Locale.US, y)}")
 
-    fun encodePing(time: Long): String {
-        return "PING:$time\n"
-    }
+    fun encodeTilt(tiltX: Float, tiltY: Float): String =
+        frame("T:${"%.2f".format(java.util.Locale.US, tiltX)}:${"%.2f".format(java.util.Locale.US, tiltY)}")
 
-    fun encodePong(time: Long): String {
-        return "PONG:$time\n"
-    }
+    fun encodePing(time: Long): String = frame("PING:$time")
 
-    fun encodeTriggers(l2: Float, r2: Float): String {
-        return "TR:%.2f:%.2f\n".format(l2, r2)
-    }
+    fun encodePong(time: Long): String = frame("PONG:$time")
 
-    fun encodeRemoteKey(key: TvRemoteKey, pressed: Boolean): String {
-        return "RK:${key.name}:${if (pressed) 1 else 0}\n"
-    }
+    fun encodeTriggers(l2: Float, r2: Float): String =
+        frame("TR:${"%.2f".format(java.util.Locale.US, l2)}:${"%.2f".format(java.util.Locale.US, r2)}")
+
+    fun encodeRemoteKey(key: TvRemoteKey, pressed: Boolean): String =
+        frame("RK:${key.name}:${if (pressed) 1 else 0}")
 }
