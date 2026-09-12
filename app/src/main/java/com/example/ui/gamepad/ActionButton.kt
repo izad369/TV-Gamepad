@@ -4,7 +4,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,15 +85,17 @@ fun ActionButton(
                 shape = CircleShape
             )
             .pointerInput(button) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        onPressChange(true)
-                        tryAwaitRelease()
-                        isPressed = false
-                        onPressChange(false)
-                    }
-                )
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    isPressed = true
+                    onPressChange(true)
+
+                    val upOrCancel = waitForUpOrCancellation()
+                    upOrCancel?.consume()
+                    isPressed = false
+                    onPressChange(false)
+                }
             },
         contentAlignment = Alignment.Center
     ) {
@@ -104,9 +108,6 @@ fun ActionButton(
     }
 }
 
-/**
- * Diamond formation of 4 main action buttons (Y at top, X on left, B on right, A at bottom).
- */
 @Composable
 fun ActionButtonsDiamond(
     size: Dp = 150.dp,
@@ -114,32 +115,22 @@ fun ActionButtonsDiamond(
     onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
 ) {
     val btnSize = size * 0.36f
-    Box(
-        modifier = modifier.size(size),
-        contentAlignment = Alignment.Center
-    ) {
-        // Top: Y (Yellow)
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
         Box(modifier = Modifier.align(Alignment.TopCenter)) {
             ActionButton(button = GameButton.Y, primaryColor = NeonYellow, size = btnSize, onPressChange = { onButtonPress(GameButton.Y, it) })
         }
-        // Left: X (Blue)
         Box(modifier = Modifier.align(Alignment.CenterStart)) {
             ActionButton(button = GameButton.X, primaryColor = NeonBlue, size = btnSize, onPressChange = { onButtonPress(GameButton.X, it) })
         }
-        // Right: B (Red)
         Box(modifier = Modifier.align(Alignment.CenterEnd)) {
             ActionButton(button = GameButton.B, primaryColor = NeonRed, size = btnSize, onPressChange = { onButtonPress(GameButton.B, it) })
         }
-        // Bottom: A (Green)
         Box(modifier = Modifier.align(Alignment.BottomCenter)) {
             ActionButton(button = GameButton.A, primaryColor = NeonGreen, size = btnSize, onPressChange = { onButtonPress(GameButton.A, it) })
         }
     }
 }
 
-/**
- * Enhanced 6-button Arcade/Fightpad formation featuring X, Y, Z on top row and A, B on bottom row.
- */
 @Composable
 fun ActionButtonsWithZ(
     modifier: Modifier = Modifier,
@@ -152,57 +143,26 @@ fun ActionButtonsWithZ(
         verticalArrangement = Arrangement.SpaceEvenly,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top Row: X, Y, Z
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ActionButton(
-                button = GameButton.X,
-                primaryColor = NeonBlue,
-                size = btnSize,
-                onPressChange = { onButtonPress(GameButton.X, it) }
-            )
-            ActionButton(
-                button = GameButton.Y,
-                primaryColor = NeonYellow,
-                size = btnSize,
-                onPressChange = { onButtonPress(GameButton.Y, it) }
-            )
-            ActionButton(
-                button = GameButton.Z,
-                primaryColor = NeonPurple,
-                size = btnSize,
-                onPressChange = { onButtonPress(GameButton.Z, it) }
-            )
+            ActionButton(button = GameButton.X, primaryColor = NeonBlue, size = btnSize, onPressChange = { onButtonPress(GameButton.X, it) })
+            ActionButton(button = GameButton.Y, primaryColor = NeonYellow, size = btnSize, onPressChange = { onButtonPress(GameButton.Y, it) })
+            ActionButton(button = GameButton.Z, primaryColor = NeonPurple, size = btnSize, onPressChange = { onButtonPress(GameButton.Z, it) })
         }
-
-        // Bottom Row: A, B
         Row(
             modifier = Modifier.fillMaxWidth(0.78f),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ActionButton(
-                button = GameButton.A,
-                primaryColor = NeonGreen,
-                size = btnSize * 1.08f,
-                onPressChange = { onButtonPress(GameButton.A, it) }
-            )
-            ActionButton(
-                button = GameButton.B,
-                primaryColor = NeonRed,
-                size = btnSize * 1.08f,
-                onPressChange = { onButtonPress(GameButton.B, it) }
-            )
+            ActionButton(button = GameButton.A, primaryColor = NeonGreen, size = btnSize * 1.08f, onPressChange = { onButtonPress(GameButton.A, it) })
+            ActionButton(button = GameButton.B, primaryColor = NeonRed, size = btnSize * 1.08f, onPressChange = { onButtonPress(GameButton.B, it) })
         }
     }
 }
 
-/**
- * Pill-shaped auxiliary buttons (SELECT, MENU, START, HOME).
- */
 @Composable
 fun AuxButton(
     label: String,
@@ -210,39 +170,31 @@ fun AuxButton(
     onPressChange: (pressed: Boolean) -> Unit
 ) {
     var isPressed by remember { mutableStateOf(false) }
-
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(if (isPressed) NeonCyan.copy(alpha = 0.45f) else Color(0xFF1C2840))
             .border(1.5.dp, if (isPressed) NeonCyan else Color(0xFF384D70), RoundedCornerShape(10.dp))
             .pointerInput(label) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        onPressChange(true)
-                        tryAwaitRelease()
-                        isPressed = false
-                        onPressChange(false)
-                    }
-                )
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    isPressed = true
+                    onPressChange(true)
+                    val upOrCancel = waitForUpOrCancellation()
+                    upOrCancel?.consume()
+                    isPressed = false
+                    onPressChange(false)
+                }
             }
             .padding(horizontal = 9.dp, vertical = 5.dp)
             .testTag("aux_btn_$label"),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            color = if (isPressed) Color.White else Color(0xFFE2E8F0),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Black
-        )
+        Text(text = label, color = if (isPressed) Color.White else Color(0xFFE2E8F0), fontSize = 10.sp, fontWeight = FontWeight.Black)
     }
 }
 
-/**
- * Top Shoulder buttons (L1, L2, R1, R2).
- */
 @Composable
 fun ShoulderButton(
     button: GameButton,
@@ -252,38 +204,27 @@ fun ShoulderButton(
     var isPressed by remember { mutableStateOf(false) }
     val isTrigger = button == GameButton.L2 || button == GameButton.R2
     val accent = if (isTrigger) NeonPurple else NeonCyan
-
     Box(
         modifier = modifier
             .size(width = 68.dp, height = 34.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isPressed) accent.copy(alpha = 0.4f) else Color(0xFF1B283E)
-            )
-            .border(
-                1.5.dp,
-                if (isPressed) accent else Color(0xFF334668),
-                RoundedCornerShape(8.dp)
-            )
+            .background(if (isPressed) accent.copy(alpha = 0.4f) else Color(0xFF1B283E))
+            .border(1.5.dp, if (isPressed) accent else Color(0xFF334668), RoundedCornerShape(8.dp))
             .pointerInput(button) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        onPressChange(true)
-                        tryAwaitRelease()
-                        isPressed = false
-                        onPressChange(false)
-                    }
-                )
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    isPressed = true
+                    onPressChange(true)
+                    val upOrCancel = waitForUpOrCancellation()
+                    upOrCancel?.consume()
+                    isPressed = false
+                    onPressChange(false)
+                }
             }
             .testTag("shoulder_btn_${button.name}"),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = button.name,
-            color = if (isPressed) Color.White else accent,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black
-        )
+        Text(text = button.name, color = if (isPressed) Color.White else accent, fontSize = 12.sp, fontWeight = FontWeight.Black)
     }
 }
