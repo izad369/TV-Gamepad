@@ -1,14 +1,11 @@
 package com.example.ui.gamepad
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -35,7 +33,7 @@ import com.example.ui.theme.NeonCyan
 @Composable
 fun VirtualDpad(
     modifier: Modifier = Modifier,
-    size: Dp = 150.dp,
+    size: Dp = 145.dp,
     upBtn: GameButton = GameButton.UP,
     downBtn: GameButton = GameButton.DOWN,
     leftBtn: GameButton = GameButton.LEFT,
@@ -44,7 +42,7 @@ fun VirtualDpad(
     tag: String = "virtual_dpad",
     onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
 ) {
-    val wingSize = size / 3f
+    val wingSize = size * 0.35f
 
     Box(
         modifier = modifier
@@ -52,22 +50,22 @@ fun VirtualDpad(
             .testTag(tag),
         contentAlignment = Alignment.Center
     ) {
-        // Cross background
+        // Cross background disc
         Box(
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(Color(0xFF0C1424))
-                .border(1.dp, Color(0xFF1E2F4D), CircleShape)
+                .background(Color(0xFF0D1627))
+                .border(1.5.dp, Color(0xFF203254), CircleShape)
         )
 
         // Center hub
         Box(
             modifier = Modifier
-                .size(wingSize * 0.9f)
+                .size(wingSize * 0.85f)
                 .clip(CircleShape)
-                .background(Color(0xFF131D31))
-                .border(1.dp, accentColor.copy(alpha = 0.3f), CircleShape)
+                .background(Color(0xFF16233B))
+                .border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape)
         )
 
         // Up Wing
@@ -125,46 +123,49 @@ private fun DpadWing(
     onPress: (GameButton, Boolean) -> Unit
 ) {
     var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 800f),
+        label = "dpad_scale_${button.name}"
+    )
 
     Box(
         modifier = modifier
+            .scale(scale)
             .testTag("dpad_${button.name}")
             .clip(RoundedCornerShape(8.dp))
             .background(
                 brush = Brush.verticalGradient(
                     if (isPressed) {
-                        listOf(accentColor.copy(alpha = 0.4f), accentColor.copy(alpha = 0.7f))
+                        listOf(accentColor.copy(alpha = 0.6f), accentColor.copy(alpha = 0.9f))
                     } else {
-                        listOf(Color(0xFF1F2E4A), Color(0xFF142036))
+                        listOf(Color(0xFF223456), Color(0xFF142138))
                     }
                 )
             )
             .border(
-                width = 1.dp,
-                color = if (isPressed) accentColor else Color(0xFF2A3D63),
+                width = 1.5.dp,
+                color = if (isPressed) Color.White else accentColor.copy(alpha = 0.7f),
                 shape = RoundedCornerShape(8.dp)
             )
             .pointerInput(button) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    isPressed = true
-                    onPress(button, true)
-
-                    val upOrCancel = waitForUpOrCancellation()
-                    upOrCancel?.consume()
-                    isPressed = false
-                    onPress(button, false)
-                }
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        onPress(button, true)
+                        tryAwaitRelease()
+                        isPressed = false
+                        onPress(button, false)
+                    }
+                )
             },
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             color = if (isPressed) Color.White else accentColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Black
         )
     }
 }
-

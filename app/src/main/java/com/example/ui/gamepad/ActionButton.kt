@@ -4,9 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +37,7 @@ import com.example.model.GameButton
 import com.example.ui.theme.NeonBlue
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonGreen
+import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.NeonRed
 import com.example.ui.theme.NeonYellow
 
@@ -47,14 +46,14 @@ fun ActionButton(
     button: GameButton,
     primaryColor: Color,
     modifier: Modifier = Modifier,
-    size: Dp = 56.dp,
+    size: Dp = 54.dp,
     onPressChange: (pressed: Boolean) -> Unit
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.88f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 600f),
-        label = "button_scale"
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 800f),
+        label = "btn_scale_${button.name}"
     )
 
     Box(
@@ -72,36 +71,34 @@ fun ActionButton(
             .background(
                 brush = Brush.verticalGradient(
                     colors = if (isPressed) {
-                        listOf(primaryColor.copy(alpha = 0.5f), primaryColor.copy(alpha = 0.8f))
+                        listOf(primaryColor.copy(alpha = 0.65f), primaryColor.copy(alpha = 0.95f))
                     } else {
-                        listOf(Color(0xFF1E2B45), Color(0xFF10192A))
+                        listOf(Color(0xFF223252), Color(0xFF141F33))
                     }
                 )
             )
             .border(
-                width = 2.dp,
-                color = if (isPressed) primaryColor else primaryColor.copy(alpha = 0.6f),
+                width = 2.5.dp,
+                color = if (isPressed) Color.White else primaryColor,
                 shape = CircleShape
             )
             .pointerInput(button) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    isPressed = true
-                    onPressChange(true)
-
-                    val upOrCancel = waitForUpOrCancellation()
-                    upOrCancel?.consume()
-                    isPressed = false
-                    onPressChange(false)
-                }
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        onPressChange(true)
+                        tryAwaitRelease()
+                        isPressed = false
+                        onPressChange(false)
+                    }
+                )
             },
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = button.label,
             color = if (isPressed) Color.White else primaryColor,
-            fontSize = 20.sp,
+            fontSize = if (size < 48.dp) 17.sp else 21.sp,
             fontWeight = FontWeight.Black
         )
     }
@@ -112,29 +109,30 @@ fun ActionButton(
  */
 @Composable
 fun ActionButtonsDiamond(
-    size: Dp = 170.dp,
+    size: Dp = 150.dp,
     modifier: Modifier = Modifier,
     onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
 ) {
+    val btnSize = size * 0.36f
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
         // Top: Y (Yellow)
         Box(modifier = Modifier.align(Alignment.TopCenter)) {
-            ActionButton(button = GameButton.Y, primaryColor = NeonYellow, onPressChange = { onButtonPress(GameButton.Y, it) })
+            ActionButton(button = GameButton.Y, primaryColor = NeonYellow, size = btnSize, onPressChange = { onButtonPress(GameButton.Y, it) })
         }
         // Left: X (Blue)
         Box(modifier = Modifier.align(Alignment.CenterStart)) {
-            ActionButton(button = GameButton.X, primaryColor = NeonBlue, onPressChange = { onButtonPress(GameButton.X, it) })
+            ActionButton(button = GameButton.X, primaryColor = NeonBlue, size = btnSize, onPressChange = { onButtonPress(GameButton.X, it) })
         }
         // Right: B (Red)
         Box(modifier = Modifier.align(Alignment.CenterEnd)) {
-            ActionButton(button = GameButton.B, primaryColor = NeonRed, onPressChange = { onButtonPress(GameButton.B, it) })
+            ActionButton(button = GameButton.B, primaryColor = NeonRed, size = btnSize, onPressChange = { onButtonPress(GameButton.B, it) })
         }
         // Bottom: A (Green)
         Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-            ActionButton(button = GameButton.A, primaryColor = NeonGreen, onPressChange = { onButtonPress(GameButton.A, it) })
+            ActionButton(button = GameButton.A, primaryColor = NeonGreen, size = btnSize, onPressChange = { onButtonPress(GameButton.A, it) })
         }
     }
 }
@@ -145,9 +143,10 @@ fun ActionButtonsDiamond(
 @Composable
 fun ActionButtonsWithZ(
     modifier: Modifier = Modifier,
-    size: Dp = 180.dp,
+    size: Dp = 155.dp,
     onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
 ) {
+    val btnSize = size * 0.31f
     Column(
         modifier = modifier.size(size),
         verticalArrangement = Arrangement.SpaceEvenly,
@@ -162,48 +161,47 @@ fun ActionButtonsWithZ(
             ActionButton(
                 button = GameButton.X,
                 primaryColor = NeonBlue,
-                size = 50.dp,
+                size = btnSize,
                 onPressChange = { onButtonPress(GameButton.X, it) }
             )
             ActionButton(
                 button = GameButton.Y,
                 primaryColor = NeonYellow,
-                size = 50.dp,
+                size = btnSize,
                 onPressChange = { onButtonPress(GameButton.Y, it) }
             )
             ActionButton(
                 button = GameButton.Z,
-                primaryColor = com.example.ui.theme.NeonPurple,
-                size = 50.dp,
+                primaryColor = NeonPurple,
+                size = btnSize,
                 onPressChange = { onButtonPress(GameButton.Z, it) }
             )
         }
 
         // Bottom Row: A, B
         Row(
-            modifier = Modifier.fillMaxWidth(0.85f),
+            modifier = Modifier.fillMaxWidth(0.78f),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
             ActionButton(
                 button = GameButton.A,
                 primaryColor = NeonGreen,
-                size = 52.dp,
+                size = btnSize * 1.08f,
                 onPressChange = { onButtonPress(GameButton.A, it) }
             )
             ActionButton(
                 button = GameButton.B,
                 primaryColor = NeonRed,
-                size = 52.dp,
+                size = btnSize * 1.08f,
                 onPressChange = { onButtonPress(GameButton.B, it) }
             )
         }
     }
 }
 
-
 /**
- * Pill-shaped auxiliary buttons (SELECT, MENU, START).
+ * Pill-shaped auxiliary buttons (SELECT, MENU, START, HOME).
  */
 @Composable
 fun AuxButton(
@@ -215,31 +213,77 @@ fun AuxButton(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isPressed) NeonCyan.copy(alpha = 0.35f) else Color(0xFF1E2A3F))
-            .border(1.dp, if (isPressed) NeonCyan else Color(0xFF334155), RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isPressed) NeonCyan.copy(alpha = 0.45f) else Color(0xFF1C2840))
+            .border(1.5.dp, if (isPressed) NeonCyan else Color(0xFF384D70), RoundedCornerShape(10.dp))
             .pointerInput(label) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    isPressed = true
-                    onPressChange(true)
-
-                    val upOrCancel = waitForUpOrCancellation()
-                    upOrCancel?.consume()
-                    isPressed = false
-                    onPressChange(false)
-                }
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        onPressChange(true)
+                        tryAwaitRelease()
+                        isPressed = false
+                        onPressChange(false)
+                    }
+                )
             }
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 9.dp, vertical = 5.dp)
             .testTag("aux_btn_$label"),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            color = if (isPressed) NeonCyan else Color.LightGray,
+            color = if (isPressed) Color.White else Color(0xFFE2E8F0),
             fontSize = 10.sp,
-            fontWeight = FontWeight.ExtraBold
+            fontWeight = FontWeight.Black
+        )
+    }
+}
+
+/**
+ * Top Shoulder buttons (L1, L2, R1, R2).
+ */
+@Composable
+fun ShoulderButton(
+    button: GameButton,
+    modifier: Modifier = Modifier,
+    onPressChange: (pressed: Boolean) -> Unit
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val isTrigger = button == GameButton.L2 || button == GameButton.R2
+    val accent = if (isTrigger) NeonPurple else NeonCyan
+
+    Box(
+        modifier = modifier
+            .size(width = 68.dp, height = 34.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isPressed) accent.copy(alpha = 0.4f) else Color(0xFF1B283E)
+            )
+            .border(
+                1.5.dp,
+                if (isPressed) accent else Color(0xFF334668),
+                RoundedCornerShape(8.dp)
+            )
+            .pointerInput(button) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        onPressChange(true)
+                        tryAwaitRelease()
+                        isPressed = false
+                        onPressChange(false)
+                    }
+                )
+            }
+            .testTag("shoulder_btn_${button.name}"),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = button.name,
+            color = if (isPressed) Color.White else accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black
         )
     }
 }

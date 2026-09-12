@@ -1,7 +1,8 @@
 package com.example.ui.gamepad
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -24,14 +25,13 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 @Composable
 fun VirtualJoystick(
     modifier: Modifier = Modifier,
-    size: Dp = 160.dp,
-    knobRatio: Float = 0.35f,
-    deadzone: Float = 0.08f,
+    size: Dp = 150.dp,
+    knobRatio: Float = 0.38f,
+    deadzone: Float = 0.05f,
     accentColor: Color = NeonCyan,
     tag: String = "virtual_joystick",
     onMove: (x: Float, y: Float) -> Unit
@@ -46,71 +46,59 @@ fun VirtualJoystick(
                 val radius = this.size.width / 2f
                 val maxDistance = radius * (1f - knobRatio / 2f)
 
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        val center = Offset(radius, radius)
-                        val delta = offset - center
-                        val dist = delta.getDistance()
-                        val clampedDist = min(dist, maxDistance)
-                        val angle = atan2(delta.y, delta.x)
-                        val clampedOffset = Offset(
-                            clampedDist * cos(angle),
-                            clampedDist * sin(angle)
-                        )
-                        knobOffset = clampedOffset
+                fun handlePointer(pos: Offset) {
+                    val center = Offset(radius, radius)
+                    val delta = pos - center
+                    val dist = delta.getDistance()
+                    val clampedDist = min(dist, maxDistance)
+                    val angle = atan2(delta.y, delta.x)
+                    val clampedOffset = Offset(
+                        clampedDist * cos(angle),
+                        clampedDist * sin(angle)
+                    )
+                    knobOffset = clampedOffset
 
-                        val normDist = (clampedDist / maxDistance).coerceIn(0f, 1f)
-                        if (normDist > deadzone) {
-                            val normX = (clampedOffset.x / maxDistance).coerceIn(-1f, 1f)
-                            val normY = (clampedOffset.y / maxDistance).coerceIn(-1f, 1f)
-                            onMove(normX, normY)
-                        } else {
-                            onMove(0f, 0f)
-                        }
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        val center = Offset(radius, radius)
-                        val delta = change.position - center
-                        val dist = delta.getDistance()
-                        val clampedDist = min(dist, maxDistance)
-                        val angle = atan2(delta.y, delta.x)
-                        val clampedOffset = Offset(
-                            clampedDist * cos(angle),
-                            clampedDist * sin(angle)
-                        )
-                        knobOffset = clampedOffset
-
-                        val normDist = (clampedDist / maxDistance).coerceIn(0f, 1f)
-                        if (normDist > deadzone) {
-                            val normX = (clampedOffset.x / maxDistance).coerceIn(-1f, 1f)
-                            val normY = (clampedOffset.y / maxDistance).coerceIn(-1f, 1f)
-                            onMove(normX, normY)
-                        } else {
-                            onMove(0f, 0f)
-                        }
-                    },
-                    onDragEnd = {
-                        knobOffset = Offset.Zero
-                        onMove(0f, 0f)
-                    },
-                    onDragCancel = {
-                        knobOffset = Offset.Zero
+                    val normDist = (clampedDist / maxDistance).coerceIn(0f, 1f)
+                    if (normDist > deadzone) {
+                        val normX = (clampedOffset.x / maxDistance).coerceIn(-1f, 1f)
+                        val normY = (clampedOffset.y / maxDistance).coerceIn(-1f, 1f)
+                        onMove(normX, normY)
+                    } else {
                         onMove(0f, 0f)
                     }
-                )
+                }
+
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    handlePointer(down.position)
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.pressed) {
+                            change.consume()
+                            handlePointer(change.position)
+                        } else {
+                            break
+                        }
+                    }
+
+                    knobOffset = Offset.Zero
+                    onMove(0f, 0f)
+                }
             },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.size(size)) {
-            val center = Offset(this.size.width / 2f, this.size.height / 2f)
-            val outerRadius = this.size.width / 2f - 4.dp.toPx()
-            val knobRadius = this.size.width * knobRatio / 2f
+            val center = Offset(size.toPx() / 2f, size.toPx() / 2f)
+            val outerRadius = size.toPx() / 2f
+            val knobRadius = outerRadius * knobRatio
 
-            // Outer ring base
+            // Outer Base Ring
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF131D31), Color(0xFF090E17)),
+                    colors = listOf(Color(0xFF142036), Color(0xFF0C1422)),
                     center = center,
                     radius = outerRadius
                 ),
@@ -118,61 +106,54 @@ fun VirtualJoystick(
                 center = center
             )
 
-            // Outer glowing border
+            // Outer Border
             drawCircle(
-                color = NeonCyan.copy(alpha = 0.35f),
-                radius = outerRadius,
+                color = accentColor.copy(alpha = 0.55f),
+                radius = outerRadius - 2f,
                 center = center,
-                style = Stroke(width = 2.dp.toPx())
+                style = Stroke(width = 3f)
             )
 
             // Cross guide lines
             drawLine(
-                color = Color.White.copy(alpha = 0.1f),
+                color = Color(0xFF223554),
                 start = Offset(center.x - outerRadius * 0.7f, center.y),
                 end = Offset(center.x + outerRadius * 0.7f, center.y),
-                strokeWidth = 1.dp.toPx()
+                strokeWidth = 2f
             )
             drawLine(
-                color = Color.White.copy(alpha = 0.1f),
+                color = Color(0xFF223554),
                 start = Offset(center.x, center.y - outerRadius * 0.7f),
                 end = Offset(center.x, center.y + outerRadius * 0.7f),
-                strokeWidth = 1.dp.toPx()
+                strokeWidth = 2f
             )
 
-            // Knob position
-            val knobPos = center + knobOffset
-
-            // Knob shadow/outer glow
+            // Inner Deadzone Ring
             drawCircle(
-                color = accentColor.copy(alpha = 0.3f),
-                radius = knobRadius + 4.dp.toPx(),
-                center = knobPos
+                color = Color(0xFF1C2C45),
+                radius = outerRadius * 0.25f,
+                center = center,
+                style = Stroke(width = 1.5f)
             )
 
-            // Knob body
+            // Thumb Knob
+            val currentKnobCenter = center + knobOffset
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF2A3D63), Color(0xFF16233B)),
-                    center = knobPos,
+                    colors = listOf(accentColor, accentColor.copy(alpha = 0.6f)),
+                    center = currentKnobCenter,
                     radius = knobRadius
                 ),
                 radius = knobRadius,
-                center = knobPos
+                center = currentKnobCenter
             )
 
-            // Knob border & center dot
+            // Knob Border
             drawCircle(
-                color = accentColor,
+                color = Color.White,
                 radius = knobRadius,
-                center = knobPos,
-                style = Stroke(width = 2.5.dp.toPx())
-            )
-
-            drawCircle(
-                color = accentColor.copy(alpha = 0.8f),
-                radius = 5.dp.toPx(),
-                center = knobPos
+                center = currentKnobCenter,
+                style = Stroke(width = 2.5f)
             )
         }
     }
