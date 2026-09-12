@@ -36,6 +36,12 @@ import com.example.ui.theme.NeonCyan
 fun VirtualDpad(
     modifier: Modifier = Modifier,
     size: Dp = 150.dp,
+    upBtn: GameButton = GameButton.UP,
+    downBtn: GameButton = GameButton.DOWN,
+    leftBtn: GameButton = GameButton.LEFT,
+    rightBtn: GameButton = GameButton.RIGHT,
+    accentColor: Color = NeonCyan,
+    tag: String = "virtual_dpad",
     onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
 ) {
     val wingSize = size / 3f
@@ -43,7 +49,7 @@ fun VirtualDpad(
     Box(
         modifier = modifier
             .size(size)
-            .testTag("virtual_dpad"),
+            .testTag(tag),
         contentAlignment = Alignment.Center
     ) {
         // Cross background
@@ -61,13 +67,14 @@ fun VirtualDpad(
                 .size(wingSize * 0.9f)
                 .clip(CircleShape)
                 .background(Color(0xFF131D31))
-                .border(1.dp, NeonCyan.copy(alpha = 0.3f), CircleShape)
+                .border(1.dp, accentColor.copy(alpha = 0.3f), CircleShape)
         )
 
         // Up Wing
         DpadWing(
-            button = GameButton.UP,
+            button = upBtn,
             label = "▲",
+            accentColor = accentColor,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .size(wingSize),
@@ -76,8 +83,9 @@ fun VirtualDpad(
 
         // Down Wing
         DpadWing(
-            button = GameButton.DOWN,
+            button = downBtn,
             label = "▼",
+            accentColor = accentColor,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .size(wingSize),
@@ -86,8 +94,9 @@ fun VirtualDpad(
 
         // Left Wing
         DpadWing(
-            button = GameButton.LEFT,
+            button = leftBtn,
             label = "◀",
+            accentColor = accentColor,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .size(wingSize),
@@ -96,8 +105,9 @@ fun VirtualDpad(
 
         // Right Wing
         DpadWing(
-            button = GameButton.RIGHT,
+            button = rightBtn,
             label = "▶",
+            accentColor = accentColor,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .size(wingSize),
@@ -110,6 +120,7 @@ fun VirtualDpad(
 private fun DpadWing(
     button: GameButton,
     label: String,
+    accentColor: Color,
     modifier: Modifier = Modifier,
     onPress: (GameButton, Boolean) -> Unit
 ) {
@@ -122,7 +133,7 @@ private fun DpadWing(
             .background(
                 brush = Brush.verticalGradient(
                     if (isPressed) {
-                        listOf(NeonCyan.copy(alpha = 0.4f), NeonCyan.copy(alpha = 0.7f))
+                        listOf(accentColor.copy(alpha = 0.4f), accentColor.copy(alpha = 0.7f))
                     } else {
                         listOf(Color(0xFF1F2E4A), Color(0xFF142036))
                     }
@@ -130,7 +141,7 @@ private fun DpadWing(
             )
             .border(
                 width = 1.dp,
-                color = if (isPressed) NeonCyan else Color(0xFF2A3D63),
+                color = if (isPressed) accentColor else Color(0xFF2A3D63),
                 shape = RoundedCornerShape(8.dp)
             )
             .pointerInput(button) {
@@ -150,9 +161,10 @@ private fun DpadWing(
     ) {
         Text(
             text = label,
-            color = if (isPressed) Color.White else NeonCyan,
+            color = if (isPressed) Color.White else accentColor,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
     }
 }
+

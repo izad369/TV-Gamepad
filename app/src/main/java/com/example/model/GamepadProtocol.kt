@@ -9,13 +9,22 @@ enum class GameButton(val label: String) {
     B("B"),
     X("X"),
     Y("Y"),
+    Z("Z"),
     L1("L1"),
     R1("R1"),
     L2("L2"),
     R2("R2"),
+    L3("L3"),
+    R3("R3"),
     SELECT("SELECT"),
     START("START"),
-    MENU("MENU")
+    MENU("MENU"),
+    HOME("HOME"),
+    // Secondary Directional cluster
+    D2_UP("▲2"),
+    D2_DOWN("▼2"),
+    D2_LEFT("◀2"),
+    D2_RIGHT("▶2")
 }
 
 enum class TvRemoteKey(val label: String) {
@@ -24,22 +33,38 @@ enum class TvRemoteKey(val label: String) {
     LEFT("◀"),
     RIGHT("▶"),
     OK("OK"),
-    BACK("BACK"),
-    HOME("HOME"),
-    MENU("MENU"),
-    VOL_UP("VOL+"),
-    VOL_DOWN("VOL-"),
-    MUTE("MUTE"),
-    PLAY_PAUSE("⏯"),
-    POWER("POWER"),
-    REWIND("⏪"),
-    FAST_FORWARD("⏩")
+    BACK("بازگشت"),
+    HOME("خانه"),
+    MENU("منو"),
+    VOL_UP("صدا +"),
+    VOL_DOWN("صدا -"),
+    MUTE("بی‌صدا"),
+    CH_UP("کانال +"),
+    CH_DOWN("کانال -"),
+    PLAY_PAUSE("پخش/توقف"),
+    POWER("پاور"),
+    REWIND("عقب"),
+    FAST_FORWARD("جلو"),
+    INPUT_SOURCE("ورودی"),
+    SETTINGS("تنظیمات"),
+    NUM_0("0"),
+    NUM_1("1"),
+    NUM_2("2"),
+    NUM_3("3"),
+    NUM_4("4"),
+    NUM_5("5"),
+    NUM_6("6"),
+    NUM_7("7"),
+    NUM_8("8"),
+    NUM_9("9")
 }
 
 data class GamepadInputState(
     val pressedButtons: Set<GameButton> = emptySet(),
     val stickX: Float = 0f,
     val stickY: Float = 0f,
+    val rightStickX: Float = 0f,
+    val rightStickY: Float = 0f,
     val l2Value: Float = 0f,
     val r2Value: Float = 0f,
     val tiltX: Float = 0f,
@@ -100,6 +125,10 @@ object ProtocolSerializer {
 
     fun encodeStick(x: Float, y: Float): String {
         return "S:%.2f:%.2f\n".format(x, y)
+    }
+
+    fun encodeRightStick(x: Float, y: Float): String {
+        return "RS:%.2f:%.2f\n".format(x, y)
     }
 
     fun encodeTilt(tiltX: Float, tiltY: Float): String {

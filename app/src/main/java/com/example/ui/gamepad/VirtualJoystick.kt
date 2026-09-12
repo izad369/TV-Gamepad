@@ -32,6 +32,8 @@ fun VirtualJoystick(
     size: Dp = 160.dp,
     knobRatio: Float = 0.35f,
     deadzone: Float = 0.08f,
+    accentColor: Color = NeonCyan,
+    tag: String = "virtual_joystick",
     onMove: (x: Float, y: Float) -> Unit
 ) {
     var knobOffset by remember { mutableStateOf(Offset.Zero) }
@@ -39,7 +41,7 @@ fun VirtualJoystick(
     Box(
         modifier = modifier
             .size(size)
-            .testTag("virtual_joystick")
+            .testTag(tag)
             .pointerInput(Unit) {
                 val radius = this.size.width / 2f
                 val maxDistance = radius * (1f - knobRatio / 2f)
@@ -143,7 +145,7 @@ fun VirtualJoystick(
 
             // Knob shadow/outer glow
             drawCircle(
-                color = NeonCyan.copy(alpha = 0.3f),
+                color = accentColor.copy(alpha = 0.3f),
                 radius = knobRadius + 4.dp.toPx(),
                 center = knobPos
             )
@@ -161,14 +163,14 @@ fun VirtualJoystick(
 
             // Knob border & center dot
             drawCircle(
-                color = NeonCyan,
+                color = accentColor,
                 radius = knobRadius,
                 center = knobPos,
                 style = Stroke(width = 2.5.dp.toPx())
             )
 
             drawCircle(
-                color = NeonCyan.copy(alpha = 0.8f),
+                color = accentColor.copy(alpha = 0.8f),
                 radius = 5.dp.toPx(),
                 center = knobPos
             )

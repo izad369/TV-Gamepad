@@ -3,7 +3,7 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/ic_gamepad_app"
+        android:drawable="@drawable/gamepad_remote_icon_1789206859086"
         android:gravity="center" />
 </layer-list>
 

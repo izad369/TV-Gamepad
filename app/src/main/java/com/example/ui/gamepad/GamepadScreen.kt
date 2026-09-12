@@ -1,6 +1,6 @@
 package com.example.ui.gamepad
 
-import android.bluetooth.BluetoothDevice
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +21,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Gamepad
-import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Wifi
@@ -31,9 +34,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,29 +55,46 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.ConnectionStatus
 import com.example.model.ConnectionType
 import com.example.model.GameButton
+import com.example.network.HttpFileServer
 import com.example.network.PhoneClientEngine
+import com.example.ui.filetransfer.FileTransferScreen
+import com.example.ui.onboarding.OnboardingTutorialDialog
 import com.example.ui.theme.CyberDarkBg
 import com.example.ui.theme.NeonBlue
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonGreen
+import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.NeonRed
 import com.example.ui.theme.NeonYellow
 
-enum class PhoneControlMode {
+enum class PhoneControlTab {
     GAMEPAD,
-    TV_REMOTE
+    TV_REMOTE,
+    FILE_TRANSFER
 }
 
 @Composable
 fun GamepadScreen(
     clientEngine: PhoneClientEngine,
+    httpFileServer: HttpFileServer? = null,
     onSwitchToTvMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("gamepad_tv_prefs", Context.MODE_PRIVATE) }
+
+    var showTutorialDialog by remember {
+        mutableStateOf(sharedPrefs.getBoolean("has_seen_tutorial", false).not())
+    }
     var showConnectDialog by remember { mutableStateOf(false) }
-    var useDpadInsteadOfStick by remember { mutableStateOf(false) }
+    var currentTab by remember { mutableStateOf(PhoneControlTab.GAMEPAD) }
+
+    // Gamepad customization toggles
+    var useDpadInsteadOfLeftStick by remember { mutableStateOf(false) }
+    var enableDualSticks by remember { mutableStateOf(true) } // Left stick + Right stick
+    var enableSecondaryDpad by remember { mutableStateOf(false) } // Second D-pad on right
+    var showSixButtonsArcade by remember { mutableStateOf(true) } // X, Y, Z + A, B
     var motionEnabled by remember { mutableStateOf(false) }
-    var currentControlMode by remember { mutableStateOf(PhoneControlMode.GAMEPAD) }
 
     val status by clientEngine.connectionStatus.collectAsStateWithLifecycle()
     val connType by clientEngine.connectionType.collectAsStateWithLifecycle()
@@ -80,7 +103,6 @@ fun GamepadScreen(
 
     val isHidRegistered by clientEngine.hidManager.isRegistered.collectAsStateWithLifecycle()
     val hidConnectedDevice by clientEngine.hidManager.connectedDevice.collectAsStateWithLifecycle()
-    val isHidSupported by clientEngine.hidManager.isHidSupported.collectAsStateWithLifecycle()
 
     val isConnectedAnywhere = status == ConnectionStatus.CONNECTED || hidConnectedDevice != null
 
@@ -93,24 +115,26 @@ fun GamepadScreen(
                     radius = 1200f
                 )
             )
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // --- TOP CONTROL BAR ---
+            // =========================================================================
+            // 1. TOP HEADER & NAVIGATION BAR (Persian UI, status indicator, mode tabs)
+            // =========================================================================
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0F1728).copy(alpha = 0.85f))
-                    .border(1.dp, Color(0xFF1E2D48), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF0F1728).copy(alpha = 0.9f))
+                    .border(1.dp, Color(0xFF1E2D48), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Connection Status Pill (Wi-Fi or Bluetooth HID)
+                // Connection Status Pill
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
@@ -156,11 +180,11 @@ fun GamepadScreen(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = when {
-                            hidConnectedDevice != null -> "HID: ${try { hidConnectedDevice?.name ?: "TV" } catch (e: SecurityException) { "TV" }}"
-                            status == ConnectionStatus.CONNECTED -> "$hostName (${pingMs}ms)"
-                            status == ConnectionStatus.CONNECTING -> "Connecting..."
-                            isHidRegistered -> "HID Ready • Connect TV"
-                            else -> "Connect to TV"
+                            hidConnectedDevice != null -> "بلوتوث: ${try { hidConnectedDevice?.name ?: "تلویزیون" } catch (e: SecurityException) { "تلویزیون" }}"
+                            status == ConnectionStatus.CONNECTED -> "وای‌فای: $hostName (${pingMs}ms)"
+                            status == ConnectionStatus.CONNECTING -> "در حال اتصال..."
+                            isHidRegistered -> "بلوتوث آماده • اتصال به TV"
+                            else -> "اتصال به تلویزیون"
                         },
                         color = Color.White,
                         fontSize = 11.sp,
@@ -168,7 +192,7 @@ fun GamepadScreen(
                     )
                 }
 
-                // Middle: Mode Switcher [🎮 Gamepad] / [📺 TV Remote]
+                // Middle: Mode Switcher Tabs
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
@@ -177,24 +201,30 @@ fun GamepadScreen(
                         .padding(2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ModeTabItem(
+                    PersianModeTabItem(
                         icon = Icons.Default.Gamepad,
-                        label = "Gamepad",
-                        isSelected = currentControlMode == PhoneControlMode.GAMEPAD,
-                        onClick = { currentControlMode = PhoneControlMode.GAMEPAD }
+                        label = "دسته بازی",
+                        isSelected = currentTab == PhoneControlTab.GAMEPAD,
+                        onClick = { currentTab = PhoneControlTab.GAMEPAD }
                     )
-                    ModeTabItem(
+                    PersianModeTabItem(
                         icon = Icons.Default.SettingsRemote,
-                        label = "TV Remote",
-                        isSelected = currentControlMode == PhoneControlMode.TV_REMOTE,
-                        onClick = { currentControlMode = PhoneControlMode.TV_REMOTE }
+                        label = "کنترل تلویزیون",
+                        isSelected = currentTab == PhoneControlTab.TV_REMOTE,
+                        onClick = { currentTab = PhoneControlTab.TV_REMOTE }
+                    )
+                    PersianModeTabItem(
+                        icon = Icons.Default.Send,
+                        label = "ارسال فایل",
+                        isSelected = currentTab == PhoneControlTab.FILE_TRANSFER,
+                        onClick = { currentTab = PhoneControlTab.FILE_TRANSFER }
                     )
                 }
 
-                // Right Controls: Sub-options or TV Mode button
+                // Right Utility Controls: Help, Tilt, and TV Console Switch
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (currentControlMode == PhoneControlMode.GAMEPAD) {
-                        // Motion Steer Toggle
+                    if (currentTab == PhoneControlTab.GAMEPAD) {
+                        // Tilt Gyro Toggle
                         Button(
                             onClick = {
                                 motionEnabled = !motionEnabled
@@ -207,7 +237,7 @@ fun GamepadScreen(
                             modifier = Modifier.height(30.dp)
                         ) {
                             Text(
-                                text = if (motionEnabled) "📳 Tilt: ON" else "📳 Tilt: OFF",
+                                text = if (motionEnabled) "📳 حسگر فعال" else "📳 حسگر",
                                 color = if (motionEnabled) NeonCyan else Color.Gray,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -216,16 +246,18 @@ fun GamepadScreen(
 
                         Spacer(modifier = Modifier.width(6.dp))
 
-                        // Stick / Dpad Toggle
+                        // Controls layout toggle (XYZ / Sticks)
                         Button(
-                            onClick = { useDpadInsteadOfStick = !useDpadInsteadOfStick },
+                            onClick = {
+                                showSixButtonsArcade = !showSixButtonsArcade
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B273D)),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.height(30.dp)
                         ) {
                             Text(
-                                text = if (useDpadInsteadOfStick) "🎛️ D-Pad" else "🕹️ Stick",
-                                color = NeonCyan,
+                                text = if (showSixButtonsArcade) "🎮 حالت XYZ" else "🎮 حالت ۴ دکمه",
+                                color = NeonPurple,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -234,7 +266,21 @@ fun GamepadScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                     }
 
-                    // Switch to TV Console Mode
+                    // Help & Tutorial Button
+                    Button(
+                        onClick = { showTutorialDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2D48)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(Icons.Default.HelpOutline, contentDescription = "آموزش", tint = NeonYellow, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("آموزش", color = Color.White, fontSize = 10.sp)
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Switch to TV Mode
                     Button(
                         onClick = onSwitchToTvMode,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF243656)),
@@ -243,14 +289,16 @@ fun GamepadScreen(
                     ) {
                         Icon(Icons.Default.Tv, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("TV Mode", color = Color.White, fontSize = 10.sp)
+                        Text("حالت TV", color = Color.White, fontSize = 10.sp)
                     }
                 }
             }
 
-            // --- BODY VIEW: GAMEPAD OR TV REMOTE ---
-            when (currentControlMode) {
-                PhoneControlMode.TV_REMOTE -> {
+            // =========================================================================
+            // 2. MAIN ACTIVE TAB CONTENT
+            // =========================================================================
+            when (currentTab) {
+                PhoneControlTab.TV_REMOTE -> {
                     TvRemotePad(
                         clientEngine = clientEngine,
                         modifier = Modifier
@@ -258,7 +306,16 @@ fun GamepadScreen(
                             .weight(1f)
                     )
                 }
-                PhoneControlMode.GAMEPAD -> {
+                PhoneControlTab.FILE_TRANSFER -> {
+                    val scope = rememberCoroutineScope()
+                    FileTransferScreen(
+                        fileServer = httpFileServer ?: remember { HttpFileServer(context, scope) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
+                }
+                PhoneControlTab.GAMEPAD -> {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -269,8 +326,9 @@ fun GamepadScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Left Shoulders: L2 & L1
                             Row {
@@ -284,7 +342,7 @@ fun GamepadScreen(
                                 }
                             }
 
-                            // Center Auxiliary Buttons: SELECT, MENU, START
+                            // Center Auxiliary Buttons: SELECT, HOME, MENU, START
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
@@ -292,11 +350,15 @@ fun GamepadScreen(
                                 AuxButton(label = "SELECT") { pressed ->
                                     clientEngine.onButtonEvent(GameButton.SELECT, pressed)
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                AuxButton(label = "HOME") { pressed ->
+                                    clientEngine.onButtonEvent(GameButton.HOME, pressed)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 AuxButton(label = "MENU") { pressed ->
                                     clientEngine.onButtonEvent(GameButton.MENU, pressed)
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 AuxButton(label = "START") { pressed ->
                                     clientEngine.onButtonEvent(GameButton.START, pressed)
                                 }
@@ -315,7 +377,7 @@ fun GamepadScreen(
                             }
                         }
 
-                        // --- MAIN CONTROLLERS ROW (Stick/D-Pad on left, Action Buttons on right) ---
+                        // --- MAIN CONTROLS ROW: DUAL JOYSTICKS / D-PADS & ACTION CLUSTERS ---
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -324,47 +386,57 @@ fun GamepadScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Left Controller: Virtual Joystick OR D-Pad
-                            Box(
-                                modifier = Modifier
-                                    .size(190.dp)
-                                    .padding(start = 8.dp),
-                                contentAlignment = Alignment.Center
+                            // LEFT SIDE CONTROLLER:
+                            // Dual Left Options: Left Joystick + Primary D-Pad
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                if (useDpadInsteadOfStick) {
-                                    VirtualDpad(size = 170.dp) { btn, pressed ->
-                                        clientEngine.onButtonEvent(btn, pressed)
-                                        when (btn) {
-                                            GameButton.LEFT -> clientEngine.onStickMove(if (pressed) -1f else 0f, 0f)
-                                            GameButton.RIGHT -> clientEngine.onStickMove(if (pressed) 1f else 0f, 0f)
-                                            GameButton.UP -> clientEngine.onStickMove(0f, if (pressed) -1f else 0f)
-                                            GameButton.DOWN -> clientEngine.onStickMove(0f, if (pressed) 1f else 0f)
-                                            else -> {}
-                                        }
-                                    }
-                                } else {
-                                    VirtualJoystick(size = 180.dp) { x, y ->
+                                // Primary Left Stick
+                                Box(
+                                    modifier = Modifier
+                                        .size(175.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    VirtualJoystick(
+                                        size = 170.dp,
+                                        accentColor = NeonCyan,
+                                        tag = "virtual_joystick_left"
+                                    ) { x, y ->
                                         clientEngine.onStickMove(x, y)
+                                    }
+                                }
+
+                                // Primary D-Pad (بالا، پایین، چپ، راست اول)
+                                Box(
+                                    modifier = Modifier.size(150.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    VirtualDpad(
+                                        size = 145.dp,
+                                        accentColor = NeonCyan,
+                                        tag = "virtual_dpad_left"
+                                    ) { btn, pressed ->
+                                        clientEngine.onButtonEvent(btn, pressed)
                                     }
                                 }
                             }
 
-                            // Center Console Branding / Logo
+                            // CENTER STATUS BADGE
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "WIRELESS GAMEPAD",
-                                    color = NeonCyan.copy(alpha = 0.5f),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 2.sp
+                                    text = "دسته بازی بیسیم",
+                                    color = NeonCyan.copy(alpha = 0.7f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Box(
                                     modifier = Modifier
-                                        .width(60.dp)
+                                        .width(70.dp)
                                         .height(2.dp)
                                         .background(
                                             Brush.horizontalGradient(
@@ -374,22 +446,47 @@ fun GamepadScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = if (isConnectedAnywhere) "CONNECTED TO TV" else "READY TO PAIR (BLUETOOTH / WI-FI)",
-                                    color = if (isConnectedAnywhere) NeonGreen.copy(alpha = 0.8f) else Color.Gray,
+                                    text = if (isConnectedAnywhere) "متصل به تلویزیون" else "آماده اتصال به تلویزیون",
+                                    color = if (isConnectedAnywhere) NeonGreen else Color.Gray,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
-                            // Right Action Diamond: A, B, X, Y
-                            Box(
-                                modifier = Modifier
-                                    .size(190.dp)
-                                    .padding(end = 8.dp),
-                                contentAlignment = Alignment.Center
+                            // RIGHT SIDE CONTROLLER:
+                            // Right Joystick (دسته دوم) + Action Cluster with X, Y, Z, A, B + Secondary D-Pad
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                ActionButtonsDiamond(size = 170.dp) { btn, pressed ->
-                                    clientEngine.onButtonEvent(btn, pressed)
+                                // Action Cluster: X, Y, Z, A, B ("و xyz")
+                                Box(
+                                    modifier = Modifier.size(175.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (showSixButtonsArcade) {
+                                        ActionButtonsWithZ(size = 175.dp) { btn, pressed ->
+                                            clientEngine.onButtonEvent(btn, pressed)
+                                        }
+                                    } else {
+                                        ActionButtonsDiamond(size = 165.dp) { btn, pressed ->
+                                            clientEngine.onButtonEvent(btn, pressed)
+                                        }
+                                    }
+                                }
+
+                                // Secondary Controller Stick (دسته کنترل دوم برای دوربین / هدف‌گیری)
+                                Box(
+                                    modifier = Modifier.size(175.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    VirtualJoystick(
+                                        size = 170.dp,
+                                        accentColor = NeonPurple,
+                                        tag = "virtual_joystick_right"
+                                    ) { rx, ry ->
+                                        clientEngine.onRightStickMove(rx, ry)
+                                    }
                                 }
                             }
                         }
@@ -399,6 +496,7 @@ fun GamepadScreen(
         }
     }
 
+    // Connection Dialog (Bluetooth HID or Wi-Fi)
     if (showConnectDialog) {
         ConnectionDialog(
             clientEngine = clientEngine,
@@ -411,10 +509,20 @@ fun GamepadScreen(
             }
         )
     }
+
+    // Onboarding Tutorial Dialog (Shown automatically on first launch, or when clicking Help)
+    if (showTutorialDialog) {
+        OnboardingTutorialDialog(
+            onDismiss = {
+                showTutorialDialog = false
+                sharedPrefs.edit().putBoolean("has_seen_tutorial", true).apply()
+            }
+        )
+    }
 }
 
 @Composable
-private fun ModeTabItem(
+private fun PersianModeTabItem(
     icon: ImageVector,
     label: String,
     isSelected: Boolean,
@@ -425,11 +533,16 @@ private fun ModeTabItem(
             .clip(RoundedCornerShape(8.dp))
             .background(if (isSelected) NeonCyan.copy(alpha = 0.25f) else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = if (isSelected) NeonCyan else Color.Gray, modifier = Modifier.size(14.dp))
-        Spacer(modifier = Modifier.width(4.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isSelected) NeonCyan else Color.Gray,
+            modifier = Modifier.size(15.dp)
+        )
+        Spacer(modifier = Modifier.width(5.dp))
         Text(
             text = label,
             color = if (isSelected) Color.White else Color.Gray,

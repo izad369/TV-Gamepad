@@ -346,6 +346,8 @@ class PhoneClientEngine(
             currentButtons,
             _currentState.value.stickX,
             _currentState.value.stickY,
+            _currentState.value.rightStickX,
+            _currentState.value.rightStickY,
             _currentState.value.l2Value,
             _currentState.value.r2Value
         )
@@ -362,10 +364,30 @@ class PhoneClientEngine(
             _currentState.value.pressedButtons,
             x,
             y,
+            _currentState.value.rightStickX,
+            _currentState.value.rightStickY,
             _currentState.value.l2Value,
             _currentState.value.r2Value
         )
         sendRaw(ProtocolSerializer.encodeStick(x, y))
+    }
+
+    fun onRightStickMove(x: Float, y: Float) {
+        _currentState.value = _currentState.value.copy(
+            rightStickX = x,
+            rightStickY = y,
+            timestamp = System.currentTimeMillis()
+        )
+        hidManager.sendGamepadReport(
+            _currentState.value.pressedButtons,
+            _currentState.value.stickX,
+            _currentState.value.stickY,
+            x,
+            y,
+            _currentState.value.l2Value,
+            _currentState.value.r2Value
+        )
+        sendRaw(ProtocolSerializer.encodeRightStick(x, y))
     }
 
     fun onTriggersMove(l2: Float, r2: Float) {
@@ -378,6 +400,8 @@ class PhoneClientEngine(
             _currentState.value.pressedButtons,
             _currentState.value.stickX,
             _currentState.value.stickY,
+            _currentState.value.rightStickX,
+            _currentState.value.rightStickY,
             l2,
             r2
         )

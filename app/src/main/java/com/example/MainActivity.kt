@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.model.DeviceRole
+import com.example.network.HttpFileServer
 import com.example.network.PhoneClientEngine
 import com.example.network.TVServerEngine
 import com.example.ui.gamepad.GamepadScreen
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
 
     private var tvServerEngine: TVServerEngine? = null
     private var phoneClientEngine: PhoneClientEngine? = null
+    private var httpFileServer: HttpFileServer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,9 +93,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 MainAppRoot(
-                    onEnginesReady = { server, client ->
+                    onEnginesReady = { server, client, fileServer ->
                         tvServerEngine = server
                         phoneClientEngine = client
+                        httpFileServer = fileServer
                     }
                 )
             }
@@ -104,6 +107,7 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         tvServerEngine?.stopServer()
         phoneClientEngine?.disconnect()
+        httpFileServer?.stopServer()
     }
 }
 
@@ -121,7 +125,7 @@ fun isRunningOnTv(context: Context): Boolean {
 
 @Composable
 fun MainAppRoot(
-    onEnginesReady: (TVServerEngine, PhoneClientEngine) -> Unit = { _, _ -> }
+    onEnginesReady: (TVServerEngine, PhoneClientEngine, HttpFileServer) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -129,9 +133,10 @@ fun MainAppRoot(
 
     val serverEngine = remember { TVServerEngine(context, coroutineScope) }
     val clientEngine = remember { PhoneClientEngine(context, coroutineScope) }
+    val fileServer = remember { HttpFileServer(context, coroutineScope) }
 
     LaunchedEffect(Unit) {
-        onEnginesReady(serverEngine, clientEngine)
+        onEnginesReady(serverEngine, clientEngine, fileServer)
     }
 
     // Default directly to TV_CONSOLE if running on an Android TV device
@@ -184,6 +189,7 @@ fun MainAppRoot(
                 DeviceRole.PHONE_CONTROLLER -> {
                     GamepadScreen(
                         clientEngine = clientEngine,
+                        httpFileServer = fileServer,
                         onSwitchToTvMode = {
                             currentRole = DeviceRole.TV_CONSOLE
                         }
@@ -255,28 +261,28 @@ fun RoleSelectionScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "TV GAMEPAD & REMOTE",
+                text = "گیم پد و کنترل تلویزیون",
                 color = Color.White,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp
+                letterSpacing = 1.sp
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = if (isTvDevice) "Android TV detected • Automatically optimized" else "Wireless Controller & Remote for Android TV\n(کنترلر بیسیم و ریموت برای تلویزیون)",
+                text = if (isTvDevice) "تلویزیون شناسایی شد • جهت‌گیری افقی فعال است" else "دسته بازی بیسیم، کنترل و ارسال فایل به تلویزیون\nبدون نیاز به نصب برنامه روی تلویزیون",
                 color = if (isTvDevice) NeonGreen else Color.LightGray,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(26.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Role 1: Phone Gamepad & Remote
+            // Role 1: Phone Gamepad & Remote & File transfer
             FocusableRoleCard(
-                title = "📱 Phone Mode (Gamepad & TV Remote)",
-                subtitle = "Use this device as a wireless game controller (HID/Wi-Fi) or TV remote control.",
+                title = "📱 حالت گوشی (گیم‌پد، ریموت و ارسال فایل)",
+                subtitle = "استفاده از گوشی به عنوان دسته بازی حرفه‌ای (XYZ)، کنترل تلویزیون (Home, Back) و ارسال فایل به مرورگر تلویزیون.",
                 accentColor = NeonCyan,
                 icon = Icons.Default.PhoneAndroid,
                 tag = "select_phone_role",
@@ -287,8 +293,8 @@ fun RoleSelectionScreen(
 
             // Role 2: TV Console Receiver
             FocusableRoleCard(
-                title = "📺 TV Mode (Console Receiver)",
-                subtitle = "Operate with your TV Remote. Receives gamepad & remote commands from phone.",
+                title = "📺 حالت تلویزیون (دریافت‌کننده کنسول)",
+                subtitle = "در صورت نصب مستقیم روی تلویزیون هوشمند با پشتیبانی کامل از ریموت فیزیکی تلویزیون.",
                 accentColor = NeonGreen,
                 icon = Icons.Default.Tv,
                 tag = "select_tv_role",
@@ -298,13 +304,14 @@ fun RoleSelectionScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "⚡ Supports Bluetooth HID Direct Gamepad + Local Wi-Fi Network",
+                text = "⚡ پشتیبانی مستقیم از بلوتوث HID بدون نصب روی TV + انتقال فایل در شبکه محلی",
                 color = Color.Gray,
                 fontSize = 11.sp
             )
         }
     }
 }
+
 
 @Composable
 private fun FocusableRoleCard(

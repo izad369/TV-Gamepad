@@ -16,4 +16,6 @@
 local.properties
 .env
 debug.keystore
+
+# Keep Gradle Wrapper jar
 !gradle/wrapper/gradle-wrapper.jar

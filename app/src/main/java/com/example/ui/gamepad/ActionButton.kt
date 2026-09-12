@@ -7,7 +7,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -134,6 +138,69 @@ fun ActionButtonsDiamond(
         }
     }
 }
+
+/**
+ * Enhanced 6-button Arcade/Fightpad formation featuring X, Y, Z on top row and A, B on bottom row.
+ */
+@Composable
+fun ActionButtonsWithZ(
+    modifier: Modifier = Modifier,
+    size: Dp = 180.dp,
+    onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
+) {
+    Column(
+        modifier = modifier.size(size),
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Top Row: X, Y, Z
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ActionButton(
+                button = GameButton.X,
+                primaryColor = NeonBlue,
+                size = 50.dp,
+                onPressChange = { onButtonPress(GameButton.X, it) }
+            )
+            ActionButton(
+                button = GameButton.Y,
+                primaryColor = NeonYellow,
+                size = 50.dp,
+                onPressChange = { onButtonPress(GameButton.Y, it) }
+            )
+            ActionButton(
+                button = GameButton.Z,
+                primaryColor = com.example.ui.theme.NeonPurple,
+                size = 50.dp,
+                onPressChange = { onButtonPress(GameButton.Z, it) }
+            )
+        }
+
+        // Bottom Row: A, B
+        Row(
+            modifier = Modifier.fillMaxWidth(0.85f),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ActionButton(
+                button = GameButton.A,
+                primaryColor = NeonGreen,
+                size = 52.dp,
+                onPressChange = { onButtonPress(GameButton.A, it) }
+            )
+            ActionButton(
+                button = GameButton.B,
+                primaryColor = NeonRed,
+                size = 52.dp,
+                onPressChange = { onButtonPress(GameButton.B, it) }
+            )
+        }
+    }
+}
+
 
 /**
  * Pill-shaped auxiliary buttons (SELECT, MENU, START).

@@ -1,6 +1,8 @@
 package com.example.ui.gamepad
 
 import android.bluetooth.BluetoothDevice
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -93,9 +96,9 @@ fun ConnectionDialog(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .background(CyberDarkBg)
-                .border(1.5.dp, CyberCardBorder, RoundedCornerShape(18.dp))
+                .border(1.5.dp, CyberCardBorder, RoundedCornerShape(20.dp))
                 .padding(18.dp)
         ) {
             Column {
@@ -114,7 +117,7 @@ fun ConnectionDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Connect to TV",
+                            text = "اتصال به تلویزیون",
                             color = Color.White,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
@@ -127,7 +130,7 @@ fun ConnectionDialog(
                         },
                         modifier = Modifier.testTag("close_connection_dialog")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                        Icon(Icons.Default.Close, contentDescription = "بستن", tint = Color.Gray)
                     }
                 }
 
@@ -148,18 +151,18 @@ fun ConnectionDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Auto Wi-Fi", fontSize = 12.sp) },
+                        text = { Text("وای‌فای خودکار", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                         icon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(16.dp)) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("Direct IP", fontSize = 12.sp) }
+                        text = { Text("آدرس مستقیم", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("Bluetooth", fontSize = 12.sp) },
+                        text = { Text("بلوتوث (HID)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                         icon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(16.dp)) }
                     )
                 }
@@ -176,9 +179,9 @@ fun ConnectionDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Searching local network...",
+                                text = "در حال جستجوی تلویزیون در شبکه وای‌فای...",
                                 color = Color.LightGray,
-                                fontSize = 12.sp
+                                fontSize = 11.sp
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(
@@ -188,7 +191,7 @@ fun ConnectionDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 IconButton(onClick = { clientEngine.startDiscovery() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = NeonCyan, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Refresh, contentDescription = "تازه‌سازی", tint = NeonCyan, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -199,22 +202,24 @@ fun ConnectionDialog(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(120.dp)
+                                    .height(130.dp)
                                     .background(CyberCardBg, RoundedCornerShape(10.dp))
                                     .padding(12.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        text = "Open this app on your TV and select TV Mode",
-                                        color = Color.Gray,
+                                        text = "تلویزیونی یافت نشد.",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Both devices must be on the same Wi-Fi / hotspot",
-                                        color = Color.DarkGray,
-                                        fontSize = 11.sp
+                                        text = "برای کار بدون نصب روی تلویزیون، از تب «بلوتوث (HID)» استفاده کنید که مستقیماً مثل دسته بازی فیزیکی به تلویزیون وصل می‌شود.",
+                                        color = Color.LightGray,
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp
                                     )
                                 }
                             }
@@ -234,7 +239,7 @@ fun ConnectionDialog(
                         // Manual IP
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = "Enter the IP address shown on your TV screen:",
+                                text = "آدرس IP نمایش داده شده روی تلویزیون را وارد کنید:",
                                 color = Color.LightGray,
                                 fontSize = 12.sp
                             )
@@ -243,7 +248,7 @@ fun ConnectionDialog(
                             OutlinedTextField(
                                 value = manualIp,
                                 onValueChange = { manualIp = it },
-                                label = { Text("TV IP Address (e.g. 192.168.1.50)") },
+                                label = { Text("آدرس IP تلویزیون (مثال: 192.168.1.50)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -259,7 +264,7 @@ fun ConnectionDialog(
                             OutlinedTextField(
                                 value = manualPort,
                                 onValueChange = { manualPort = it },
-                                label = { Text("Port (default: 8888)") },
+                                label = { Text("پورت (پیش‌فرض: 8888)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -276,26 +281,27 @@ fun ConnectionDialog(
                                 onClick = {
                                     val port = manualPort.toIntOrNull() ?: 8888
                                     if (manualIp.isNotBlank()) {
-                                        onConnectWifi(manualIp.trim(), port, "TV ($manualIp)")
+                                        onConnectWifi(manualIp.trim(), port, "تلویزیون ($manualIp)")
                                         onDismiss()
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                             ) {
-                                Text("Connect Directly", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("اتصال مستقیم", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                     2 -> {
-                        // Bluetooth
+                        // Bluetooth HID
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = "Select paired TV Bluetooth device:",
-                                color = Color.LightGray,
-                                fontSize = 12.sp
+                                text = "اتصال مستقیم بدون نیاز به نصب برنامه روی تلویزیون:",
+                                color = NeonGreen,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             if (pairedDevices.isEmpty()) {
                                 Box(
@@ -307,15 +313,16 @@ fun ConnectionDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "No paired Bluetooth devices found.\nPair your TV in Android Bluetooth Settings first.",
-                                        color = Color.Gray,
-                                        fontSize = 12.sp
+                                        text = "هیچ دستگاه جفت‌شده‌ای یافت نشد.\nابتدا تلویزیون را در تنظیمات بلوتوث گوشی جفت (Pair) کنید.",
+                                        color = Color.LightGray,
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp
                                     )
                                 }
                             } else {
                                 LazyColumn(modifier = Modifier.height(160.dp)) {
                                     items(pairedDevices) { device ->
-                                        val deviceName = try { device.name ?: "Unknown TV" } catch (e: SecurityException) { "Unknown TV" }
+                                        val deviceName = try { device.name ?: "تلویزیون ناشناس" } catch (e: SecurityException) { "تلویزیون ناشناس" }
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -334,7 +341,7 @@ fun ConnectionDialog(
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column {
                                                 Text(deviceName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                                Text("Bluetooth HID & Serial: ${device.address}", color = Color.Gray, fontSize = 11.sp)
+                                                Text("پروفایل گیم‌پد HID: ${device.address}", color = Color.Gray, fontSize = 11.sp)
                                             }
                                         }
                                     }
@@ -343,11 +350,11 @@ fun ConnectionDialog(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            val ctx = androidx.compose.ui.platform.LocalContext.current
+                            val ctx = LocalContext.current
                             Button(
                                 onClick = {
                                     try {
-                                        val intent = android.content.Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+                                        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
                                         ctx.startActivity(intent)
                                     } catch (e: Exception) {
                                         e.printStackTrace()
@@ -359,7 +366,7 @@ fun ConnectionDialog(
                             ) {
                                 Icon(Icons.Default.Bluetooth, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Pair Device in Android Settings", color = Color.White, fontSize = 12.sp)
+                                Text("تنظیمات بلوتوث اندروید", color = Color.White, fontSize = 12.sp)
                             }
                         }
                     }
@@ -408,7 +415,7 @@ private fun DiscoveredHostItem(
             colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text("Connect", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("اتصال", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         }
     }
 }

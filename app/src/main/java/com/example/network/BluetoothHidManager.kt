@@ -97,22 +97,22 @@ class BluetoothHidManager(
             0x25.toByte(), 0x01.toByte(), //   LOGICAL_MAXIMUM (1)
             0x75.toByte(), 0x01.toByte(), //   REPORT_SIZE (1)
             0x95.toByte(), 0x10.toByte(), //   REPORT_COUNT (16)
-            0x09.toByte(), 0xe9.toByte(), //   USAGE (Volume Increment)
-            0x09.toByte(), 0xea.toByte(), //   USAGE (Volume Decrement)
-            0x09.toByte(), 0xe2.toByte(), //   USAGE (Mute)
-            0x09.toByte(), 0xcd.toByte(), //   USAGE (Play/Pause)
-            0x09.toByte(), 0x30.toByte(), //   USAGE (Power)
-            0x09.toByte(), 0x24.toByte(), //   USAGE (Back)
-            0x09.toByte(), 0x23.toByte(), //   USAGE (Home)
-            0x09.toByte(), 0x40.toByte(), //   USAGE (Menu)
-            0x09.toByte(), 0x41.toByte(), //   USAGE (Select / OK)
-            0x09.toByte(), 0x42.toByte(), //   USAGE (Up)
-            0x09.toByte(), 0x43.toByte(), //   USAGE (Down)
-            0x09.toByte(), 0x44.toByte(), //   USAGE (Left)
-            0x09.toByte(), 0x45.toByte(), //   USAGE (Right)
-            0x09.toByte(), 0xb5.toByte(), //   USAGE (Scan Next Track)
-            0x09.toByte(), 0xb6.toByte(), //   USAGE (Scan Previous Track)
-            0x09.toByte(), 0xb7.toByte(), //   USAGE (Stop)
+            0x09.toByte(), 0xe9.toByte(), //   USAGE (Volume Increment) - bit 0
+            0x09.toByte(), 0xea.toByte(), //   USAGE (Volume Decrement) - bit 1
+            0x09.toByte(), 0xe2.toByte(), //   USAGE (Mute)             - bit 2
+            0x09.toByte(), 0xcd.toByte(), //   USAGE (Play/Pause)        - bit 3
+            0x09.toByte(), 0x30.toByte(), //   USAGE (Power)             - bit 4
+            0x0a.toByte(), 0x24.toByte(), 0x02.toByte(), // USAGE (AC Back 0x0224) - bit 5
+            0x0a.toByte(), 0x23.toByte(), 0x02.toByte(), // USAGE (AC Home 0x0223) - bit 6
+            0x09.toByte(), 0x40.toByte(), //   USAGE (Menu)              - bit 7
+            0x09.toByte(), 0x9c.toByte(), //   USAGE (Channel Increment) - bit 8
+            0x09.toByte(), 0x9d.toByte(), //   USAGE (Channel Decrement) - bit 9
+            0x09.toByte(), 0xb5.toByte(), //   USAGE (Scan Next / FF)    - bit 10
+            0x09.toByte(), 0xb6.toByte(), //   USAGE (Scan Prev / REW)   - bit 11
+            0x09.toByte(), 0xb7.toByte(), //   USAGE (Stop)              - bit 12
+            0x09.toByte(), 0x87.toByte(), //   USAGE (Media Select / TV) - bit 13
+            0x09.toByte(), 0x41.toByte(), //   USAGE (Select)            - bit 14
+            0x09.toByte(), 0x42.toByte(), //   USAGE (Recall Last)       - bit 15
             0x81.toByte(), 0x02.toByte(), //   INPUT (Data,Var,Abs)
             0xc0.toByte()  // END_COLLECTION
         )
@@ -258,6 +258,8 @@ class BluetoothHidManager(
         pressedButtons: Set<GameButton>,
         stickX: Float,
         stickY: Float,
+        rightStickX: Float = 0f,
+        rightStickY: Float = 0f,
         l2Value: Float = 0f,
         r2Value: Float = 0f
     ) {
@@ -270,19 +272,23 @@ class BluetoothHidManager(
         if (pressedButtons.contains(GameButton.B)) buttonMask = buttonMask or (1 shl 1)
         if (pressedButtons.contains(GameButton.X)) buttonMask = buttonMask or (1 shl 2)
         if (pressedButtons.contains(GameButton.Y)) buttonMask = buttonMask or (1 shl 3)
-        if (pressedButtons.contains(GameButton.L1)) buttonMask = buttonMask or (1 shl 4)
-        if (pressedButtons.contains(GameButton.R1)) buttonMask = buttonMask or (1 shl 5)
-        if (pressedButtons.contains(GameButton.L2) || l2Value > 0.5f) buttonMask = buttonMask or (1 shl 6)
-        if (pressedButtons.contains(GameButton.R2) || r2Value > 0.5f) buttonMask = buttonMask or (1 shl 7)
-        if (pressedButtons.contains(GameButton.SELECT)) buttonMask = buttonMask or (1 shl 8)
-        if (pressedButtons.contains(GameButton.START)) buttonMask = buttonMask or (1 shl 9)
-        if (pressedButtons.contains(GameButton.MENU)) buttonMask = buttonMask or (1 shl 10)
+        if (pressedButtons.contains(GameButton.Z)) buttonMask = buttonMask or (1 shl 4)
+        if (pressedButtons.contains(GameButton.L1)) buttonMask = buttonMask or (1 shl 5)
+        if (pressedButtons.contains(GameButton.R1)) buttonMask = buttonMask or (1 shl 6)
+        if (pressedButtons.contains(GameButton.L2) || l2Value > 0.5f) buttonMask = buttonMask or (1 shl 7)
+        if (pressedButtons.contains(GameButton.R2) || r2Value > 0.5f) buttonMask = buttonMask or (1 shl 8)
+        if (pressedButtons.contains(GameButton.SELECT)) buttonMask = buttonMask or (1 shl 9)
+        if (pressedButtons.contains(GameButton.START)) buttonMask = buttonMask or (1 shl 10)
+        if (pressedButtons.contains(GameButton.MENU)) buttonMask = buttonMask or (1 shl 11)
+        if (pressedButtons.contains(GameButton.HOME)) buttonMask = buttonMask or (1 shl 12)
+        if (pressedButtons.contains(GameButton.L3)) buttonMask = buttonMask or (1 shl 13)
+        if (pressedButtons.contains(GameButton.R3)) buttonMask = buttonMask or (1 shl 14)
 
-        // D-Pad / Hat switch: 0=Up, 1=UpRight, 2=Right, 3=DownRight, 4=Down, 5=DownLeft, 6=Left, 7=UpLeft, 8=Neutral
-        val up = pressedButtons.contains(GameButton.UP)
-        val down = pressedButtons.contains(GameButton.DOWN)
-        val left = pressedButtons.contains(GameButton.LEFT)
-        val right = pressedButtons.contains(GameButton.RIGHT)
+        // D-Pad / Hat switch: includes both primary and secondary directional clusters
+        val up = pressedButtons.contains(GameButton.UP) || pressedButtons.contains(GameButton.D2_UP)
+        val down = pressedButtons.contains(GameButton.DOWN) || pressedButtons.contains(GameButton.D2_DOWN)
+        val left = pressedButtons.contains(GameButton.LEFT) || pressedButtons.contains(GameButton.D2_LEFT)
+        val right = pressedButtons.contains(GameButton.RIGHT) || pressedButtons.contains(GameButton.D2_RIGHT)
 
         val hat: Byte = when {
             up && right -> 1
@@ -296,9 +302,13 @@ class BluetoothHidManager(
             else -> 8
         }.toByte()
 
-        // Thumbstick axes (-127 to 127)
+        // Left Thumbstick axes (-127 to 127)
         val axisX = (stickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
         val axisY = (stickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
+
+        // Right Thumbstick axes (-127 to 127)
+        val axisZ = (rightStickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
+        val axisRz = (rightStickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
 
         // Triggers (0 to 255)
         val triggerL2 = (l2Value.coerceIn(0f, 1f) * 255f).toInt().toByte()
@@ -310,8 +320,8 @@ class BluetoothHidManager(
             hat,
             axisX,
             axisY,
-            0, // Right stick X
-            0, // Right stick Y
+            axisZ,
+            axisRz,
             triggerL2,
             triggerR2
         )
@@ -321,39 +331,81 @@ class BluetoothHidManager(
 
     /**
      * Sends Consumer Control (TV Remote) report (Report ID 2)
+     * and dual-dispatches navigation/action keys via Gamepad Report (Report ID 1)
+     * to ensure 100% compatibility with all Android TV and Smart TV brands.
      */
     @SuppressLint("MissingPermission")
     fun sendRemoteKey(key: TvRemoteKey, pressed: Boolean) {
         val target = _connectedDevice.value ?: return
         val hid = hidDevice ?: return
 
-        var keyMask = 0
+        var consumerKeyMask = 0
         if (pressed) {
             when (key) {
-                TvRemoteKey.VOL_UP -> keyMask = keyMask or (1 shl 0)
-                TvRemoteKey.VOL_DOWN -> keyMask = keyMask or (1 shl 1)
-                TvRemoteKey.MUTE -> keyMask = keyMask or (1 shl 2)
-                TvRemoteKey.PLAY_PAUSE -> keyMask = keyMask or (1 shl 3)
-                TvRemoteKey.POWER -> keyMask = keyMask or (1 shl 4)
-                TvRemoteKey.BACK -> keyMask = keyMask or (1 shl 5)
-                TvRemoteKey.HOME -> keyMask = keyMask or (1 shl 6)
-                TvRemoteKey.MENU -> keyMask = keyMask or (1 shl 7)
-                TvRemoteKey.OK -> keyMask = keyMask or (1 shl 8)
-                TvRemoteKey.UP -> keyMask = keyMask or (1 shl 9)
-                TvRemoteKey.DOWN -> keyMask = keyMask or (1 shl 10)
-                TvRemoteKey.LEFT -> keyMask = keyMask or (1 shl 11)
-                TvRemoteKey.RIGHT -> keyMask = keyMask or (1 shl 12)
-                TvRemoteKey.FAST_FORWARD -> keyMask = keyMask or (1 shl 13)
-                TvRemoteKey.REWIND -> keyMask = keyMask or (1 shl 14)
+                TvRemoteKey.VOL_UP -> consumerKeyMask = consumerKeyMask or (1 shl 0)
+                TvRemoteKey.VOL_DOWN -> consumerKeyMask = consumerKeyMask or (1 shl 1)
+                TvRemoteKey.MUTE -> consumerKeyMask = consumerKeyMask or (1 shl 2)
+                TvRemoteKey.PLAY_PAUSE -> consumerKeyMask = consumerKeyMask or (1 shl 3)
+                TvRemoteKey.POWER -> consumerKeyMask = consumerKeyMask or (1 shl 4)
+                TvRemoteKey.BACK -> consumerKeyMask = consumerKeyMask or (1 shl 5)
+                TvRemoteKey.HOME -> consumerKeyMask = consumerKeyMask or (1 shl 6)
+                TvRemoteKey.MENU -> consumerKeyMask = consumerKeyMask or (1 shl 7)
+                TvRemoteKey.CH_UP -> consumerKeyMask = consumerKeyMask or (1 shl 8)
+                TvRemoteKey.CH_DOWN -> consumerKeyMask = consumerKeyMask or (1 shl 9)
+                TvRemoteKey.FAST_FORWARD -> consumerKeyMask = consumerKeyMask or (1 shl 10)
+                TvRemoteKey.REWIND -> consumerKeyMask = consumerKeyMask or (1 shl 11)
+                TvRemoteKey.INPUT_SOURCE -> consumerKeyMask = consumerKeyMask or (1 shl 13)
+                TvRemoteKey.OK -> consumerKeyMask = consumerKeyMask or (1 shl 14)
+                else -> {}
             }
         }
 
-        val reportData = byteArrayOf(
-            (keyMask and 0xFF).toByte(),
-            ((keyMask shr 8) and 0xFF).toByte()
+        val consumerReport = byteArrayOf(
+            (consumerKeyMask and 0xFF).toByte(),
+            ((consumerKeyMask shr 8) and 0xFF).toByte()
         )
+        hid.sendReport(target, 2, consumerReport)
 
-        hid.sendReport(target, 2, reportData)
+        // Dual-dispatch: also transmit D-Pad, OK, Back, Home, Menu over Gamepad report
+        // so that TVs expecting standard D-Pad / Gamepad buttons respond immediately.
+        when (key) {
+            TvRemoteKey.UP, TvRemoteKey.DOWN, TvRemoteKey.LEFT, TvRemoteKey.RIGHT -> {
+                val hat: Byte = if (pressed) {
+                    when (key) {
+                        TvRemoteKey.UP -> 0
+                        TvRemoteKey.RIGHT -> 2
+                        TvRemoteKey.DOWN -> 4
+                        TvRemoteKey.LEFT -> 6
+                        else -> 8
+                    }.toByte()
+                } else {
+                    8.toByte() // Neutral
+                }
+                val gamepadReport = byteArrayOf(0, 0, hat, 0, 0, 0, 0, 0, 0)
+                hid.sendReport(target, 1, gamepadReport)
+            }
+            TvRemoteKey.OK -> {
+                val buttonMask = if (pressed) (1 shl 0) else 0 // Button A
+                val gamepadReport = byteArrayOf((buttonMask and 0xFF).toByte(), 0, 8, 0, 0, 0, 0, 0, 0)
+                hid.sendReport(target, 1, gamepadReport)
+            }
+            TvRemoteKey.BACK -> {
+                val buttonMask = if (pressed) (1 shl 1) else 0 // Button B
+                val gamepadReport = byteArrayOf((buttonMask and 0xFF).toByte(), 0, 8, 0, 0, 0, 0, 0, 0)
+                hid.sendReport(target, 1, gamepadReport)
+            }
+            TvRemoteKey.HOME -> {
+                val buttonMask = if (pressed) (1 shl 12) else 0 // Home Button
+                val gamepadReport = byteArrayOf((buttonMask and 0xFF).toByte(), ((buttonMask shr 8) and 0xFF).toByte(), 8, 0, 0, 0, 0, 0, 0)
+                hid.sendReport(target, 1, gamepadReport)
+            }
+            TvRemoteKey.MENU -> {
+                val buttonMask = if (pressed) (1 shl 11) else 0 // Menu Button
+                val gamepadReport = byteArrayOf((buttonMask and 0xFF).toByte(), ((buttonMask shr 8) and 0xFF).toByte(), 8, 0, 0, 0, 0, 0, 0)
+                hid.sendReport(target, 1, gamepadReport)
+            }
+            else -> {}
+        }
     }
 
     @SuppressLint("MissingPermission")

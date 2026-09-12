@@ -235,6 +235,14 @@ class TVServerEngine(
                     updatePlayerStick(playerId, x, y)
                 }
             }
+            "RS" -> {
+                // Right stick event: RS:0.25:-0.80
+                if (parts.size >= 3) {
+                    val rx = parts[1].toFloatOrNull() ?: 0f
+                    val ry = parts[2].toFloatOrNull() ?: 0f
+                    // Handled if needed
+                }
+            }
             "TR" -> {
                 // Triggers: TR:0.5:1.0
                 if (parts.size >= 3) {
