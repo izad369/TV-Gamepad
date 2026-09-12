@@ -1,31 +1,5 @@
 package com.example.model
 
-enum class GameButton(val label: String) {
-    UP("▲"),
-    DOWN("▼"),
-    LEFT("◀"),
-    RIGHT("▶"),
-    A("A"),
-    B("B"),
-    X("X"),
-    Y("Y"),
-    Z("Z"),
-    L1("L1"),
-    R1("R1"),
-    L2("L2"),
-    R2("R2"),
-    L3("L3"),
-    R3("R3"),
-    SELECT("SELECT"),
-    START("START"),
-    MENU("MENU"),
-    HOME("HOME"),
-    D2_UP("▲2"),
-    D2_DOWN("▼2"),
-    D2_LEFT("◀2"),
-    D2_RIGHT("▶2")
-}
-
 enum class TvRemoteKey(val label: String) {
     UP("▲"),
     DOWN("▼"),
@@ -109,7 +83,7 @@ data class ControllerPlayer(
 
 /**
  * Wire protocol encoder / decoder for Wi-Fi and Bluetooth.
- * Every packet is one newline-delimited frame.
+ * Every packet is exactly one newline-delimited frame.
  */
 object ProtocolSerializer {
     const val DEFAULT_PORT = 8888
