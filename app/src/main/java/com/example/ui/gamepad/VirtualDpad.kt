@@ -4,7 +4,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -43,74 +45,17 @@ fun VirtualDpad(
     onButtonPress: (button: GameButton, pressed: Boolean) -> Unit
 ) {
     val wingSize = size * 0.35f
-
-    Box(
-        modifier = modifier
-            .size(size)
-            .testTag(tag),
-        contentAlignment = Alignment.Center
-    ) {
-        // Cross background disc
+    Box(modifier = modifier.size(size).testTag(tag), contentAlignment = Alignment.Center) {
         Box(
-            modifier = Modifier
-                .size(size)
-                .clip(CircleShape)
-                .background(Color(0xFF0D1627))
-                .border(1.5.dp, Color(0xFF203254), CircleShape)
+            modifier = Modifier.size(size).clip(CircleShape).background(Color(0xFF0D1627)).border(1.5.dp, Color(0xFF203254), CircleShape)
         )
-
-        // Center hub
         Box(
-            modifier = Modifier
-                .size(wingSize * 0.85f)
-                .clip(CircleShape)
-                .background(Color(0xFF16233B))
-                .border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape)
+            modifier = Modifier.size(wingSize * 0.85f).clip(CircleShape).background(Color(0xFF16233B)).border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape)
         )
-
-        // Up Wing
-        DpadWing(
-            button = upBtn,
-            label = "▲",
-            accentColor = accentColor,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .size(wingSize),
-            onPress = onButtonPress
-        )
-
-        // Down Wing
-        DpadWing(
-            button = downBtn,
-            label = "▼",
-            accentColor = accentColor,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .size(wingSize),
-            onPress = onButtonPress
-        )
-
-        // Left Wing
-        DpadWing(
-            button = leftBtn,
-            label = "◀",
-            accentColor = accentColor,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(wingSize),
-            onPress = onButtonPress
-        )
-
-        // Right Wing
-        DpadWing(
-            button = rightBtn,
-            label = "▶",
-            accentColor = accentColor,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(wingSize),
-            onPress = onButtonPress
-        )
+        DpadWing(button = upBtn, label = "▲", accentColor = accentColor, modifier = Modifier.align(Alignment.TopCenter).size(wingSize), onPress = onButtonPress)
+        DpadWing(button = downBtn, label = "▼", accentColor = accentColor, modifier = Modifier.align(Alignment.BottomCenter).size(wingSize), onPress = onButtonPress)
+        DpadWing(button = leftBtn, label = "◀", accentColor = accentColor, modifier = Modifier.align(Alignment.CenterStart).size(wingSize), onPress = onButtonPress)
+        DpadWing(button = rightBtn, label = "▶", accentColor = accentColor, modifier = Modifier.align(Alignment.CenterEnd).size(wingSize), onPress = onButtonPress)
     }
 }
 
@@ -128,44 +73,27 @@ private fun DpadWing(
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 800f),
         label = "dpad_scale_${button.name}"
     )
-
     Box(
         modifier = modifier
             .scale(scale)
             .testTag("dpad_${button.name}")
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                brush = Brush.verticalGradient(
-                    if (isPressed) {
-                        listOf(accentColor.copy(alpha = 0.6f), accentColor.copy(alpha = 0.9f))
-                    } else {
-                        listOf(Color(0xFF223456), Color(0xFF142138))
-                    }
-                )
-            )
-            .border(
-                width = 1.5.dp,
-                color = if (isPressed) Color.White else accentColor.copy(alpha = 0.7f),
-                shape = RoundedCornerShape(8.dp)
-            )
+            .background(Brush.verticalGradient(if (isPressed) listOf(accentColor.copy(alpha = 0.6f), accentColor.copy(alpha = 0.9f)) else listOf(Color(0xFF223456), Color(0xFF142138))))
+            .border(1.5.dp, if (isPressed) Color.White else accentColor.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
             .pointerInput(button) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        onPress(button, true)
-                        tryAwaitRelease()
-                        isPressed = false
-                        onPress(button, false)
-                    }
-                )
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    isPressed = true
+                    onPress(button, true)
+                    val upOrCancel = waitForUpOrCancellation()
+                    upOrCancel?.consume()
+                    isPressed = false
+                    onPress(button, false)
+                }
             },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            color = if (isPressed) Color.White else accentColor,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Black
-        )
+        Text(text = label, color = if (isPressed) Color.White else accentColor, fontSize = 17.sp, fontWeight = FontWeight.Black)
     }
 }
