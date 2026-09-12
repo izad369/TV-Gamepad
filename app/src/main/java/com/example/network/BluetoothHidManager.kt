@@ -26,26 +26,57 @@ class BluetoothHidManager(
     companion object {
         private const val TAG = "BluetoothHidManager"
 
-        // Three independent HID top-level collections:
-        // 1 = standard gamepad, 2 = standard 8-bit consumer/media controls,
-        // 3 = standard keyboard-style Android TV navigation/numeric keys.
-        // Keeping navigation out of the consumer bitfield avoids firmware aliases
-        // such as Volume Down being interpreted as Back on some Android TVs.
+        // Android TV-compatible HID layout:
+        // Report 1 = Gamepad
+        // Report 2 = Consumer/media controls
+        // Report 3 = Keyboard-style TV navigation/numeric keys
+        // The gamepad usages below are explicitly declared instead of a generic
+        // 0x01..0x10 range so Android can map A/B/X/Y/L1/R1/L3/R3 correctly.
         val HID_REPORT_DESCRIPTOR = byteArrayOf(
             // GAMEPAD, Report ID 1
             0x05, 0x01, 0x09, 0x05, 0xA1.toByte(), 0x01, 0x85, 0x01,
-            0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
-            0x75, 0x01, 0x95.toByte(), 0x10, 0x81.toByte(), 0x02,
-            0x05, 0x01, 0x09, 0x39, 0x15, 0x00, 0x25, 0x07, 0x35, 0x00,
-            0x46, 0x3B, 0x01, 0x65, 0x14, 0x75, 0x04, 0x95.toByte(), 0x01,
-            0x81.toByte(), 0x42, 0x75, 0x04, 0x95.toByte(), 0x01, 0x81.toByte(), 0x03,
-            0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35,
-            0x15, 0x81.toByte(), 0x25, 0x7F, 0x75, 0x08, 0x95.toByte(), 0x04,
-            0x81.toByte(), 0x02, 0x09, 0x36, 0x09, 0x37, 0x15, 0x00,
-            0x26, 0xFF.toByte(), 0x00, 0x75, 0x08, 0x95.toByte(), 0x02,
-            0x81.toByte(), 0x02, 0xC0.toByte(),
 
-            // CONSUMER CONTROL, Report ID 2, one bit per common media control.
+            // Buttons: A(1), B(2), Z/custom(3), X(4), Y(5),
+            // L1(7), R1(8), Select(9), Start(10), Menu(11), Home(12),
+            // unused(13), L3(14), R3(15), unused(16), unused(17).
+            0x05, 0x09,
+            0x19, 0x01, 0x29, 0x02,
+            0x19, 0x04, 0x29, 0x05,
+            0x19, 0x03, 0x29, 0x03,
+            0x19, 0x07, 0x29, 0x08,
+            0x19, 0x09, 0x29, 0x0C,
+            0x19, 0x0D, 0x29, 0x11,
+            0x15, 0x00, 0x25, 0x01,
+            0x75, 0x01, 0x95.toByte(), 0x10,
+            0x81.toByte(), 0x02,
+
+            // D-pad / Hat switch: logical 0..7, physical 0..315 degrees,
+            // 4-bit field with null state. This is the Android CDD mapping.
+            0x05, 0x01, 0x09, 0x39,
+            0x15, 0x00, 0x25, 0x07,
+            0x35, 0x00, 0x46, 0x3B, 0x01,
+            0x65, 0x14,
+            0x75, 0x04, 0x95.toByte(), 0x01,
+            0x81.toByte(), 0x42,
+            0x75, 0x04, 0x95.toByte(), 0x01,
+            0x81.toByte(), 0x03,
+
+            // Left stick X/Y and right stick Z/Rz.
+            0x05, 0x01,
+            0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35,
+            0x15, 0x81.toByte(), 0x25, 0x7F,
+            0x75, 0x08, 0x95.toByte(), 0x04,
+            0x81.toByte(), 0x02,
+
+            // Left/Right analog triggers using Android's Simulation Controls usages.
+            0x05, 0x02,
+            0x09.toByte(), 0xC5.toByte(), 0x09.toByte(), 0xC4.toByte(),
+            0x15, 0x00, 0x26, 0xFF.toByte(), 0x00,
+            0x75, 0x08, 0x95.toByte(), 0x02,
+            0x81.toByte(), 0x02,
+            0xC0.toByte(),
+
+            // CONSUMER CONTROL, Report ID 2
             0x05, 0x0C, 0x09, 0x01, 0xA1.toByte(), 0x01, 0x85, 0x02,
             0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08,
             0x09.toByte(), 0xE9.toByte(), // Volume Up
@@ -55,17 +86,22 @@ class BluetoothHidManager(
             0x09.toByte(), 0x30,          // Power
             0x09.toByte(), 0x9C.toByte(), // Channel Up
             0x09.toByte(), 0x9D.toByte(), // Channel Down
-            0x09.toByte(), 0xB5.toByte(), // Scan Next / Fast Forward
-            0x81.toByte(), 0x02, 0xC0.toByte(),
+            0x09.toByte(), 0xB5.toByte(), // Fast Forward / Scan Next
+            0x81.toByte(), 0x02,
+            0xC0.toByte(),
 
             // KEYBOARD, Report ID 3. Boot-style 8-byte keyboard report:
             // modifier, reserved, six simultaneous key slots.
             0x05, 0x01, 0x09, 0x06, 0xA1.toByte(), 0x01, 0x85, 0x03,
             0x05, 0x07, 0x19.toByte(), 0xE0.toByte(), 0x29, 0xE7.toByte(),
-            0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08, 0x81.toByte(), 0x02,
+            0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08,
+            0x81.toByte(), 0x02,
             0x95.toByte(), 0x01, 0x75, 0x08, 0x81.toByte(), 0x01,
-            0x95.toByte(), 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65,
-            0x19, 0x00, 0x29, 0x65, 0x81.toByte(), 0x00, 0xC0.toByte()
+            0x95.toByte(), 0x06, 0x75, 0x08,
+            0x15, 0x00, 0x25, 0x65,
+            0x19, 0x00, 0x29, 0x65,
+            0x81.toByte(), 0x00,
+            0xC0.toByte()
         )
     }
 
@@ -183,6 +219,12 @@ class BluetoothHidManager(
     ) {
         val target = _connectedDevice.value ?: return
         val hid = hidDevice ?: return
+
+        // Match the explicit button usages in the descriptor by bit position.
+        // A=bit0(usage1), B=bit1(usage2), X=bit2(usage4), Y=bit3(usage5),
+        // Z=bit4(usage3), L1=bit5(usage7), R1=bit6(usage8),
+        // Select=bit7(usage9), Start=bit8(usage10), Menu=bit9(usage11),
+        // Home=bit10(usage12), L3=bit12(usage14), R3=bit13(usage15).
         var buttonMask = 0
         if (pressedButtons.contains(GameButton.A)) buttonMask = buttonMask or (1 shl 0)
         if (pressedButtons.contains(GameButton.B)) buttonMask = buttonMask or (1 shl 1)
@@ -191,33 +233,50 @@ class BluetoothHidManager(
         if (pressedButtons.contains(GameButton.Z)) buttonMask = buttonMask or (1 shl 4)
         if (pressedButtons.contains(GameButton.L1)) buttonMask = buttonMask or (1 shl 5)
         if (pressedButtons.contains(GameButton.R1)) buttonMask = buttonMask or (1 shl 6)
-        if (pressedButtons.contains(GameButton.L2) || l2Value > 0.5f) buttonMask = buttonMask or (1 shl 7)
-        if (pressedButtons.contains(GameButton.R2) || r2Value > 0.5f) buttonMask = buttonMask or (1 shl 8)
-        if (pressedButtons.contains(GameButton.SELECT)) buttonMask = buttonMask or (1 shl 9)
-        if (pressedButtons.contains(GameButton.START)) buttonMask = buttonMask or (1 shl 10)
-        if (pressedButtons.contains(GameButton.MENU)) buttonMask = buttonMask or (1 shl 11)
-        if (pressedButtons.contains(GameButton.HOME)) buttonMask = buttonMask or (1 shl 12)
-        if (pressedButtons.contains(GameButton.L3)) buttonMask = buttonMask or (1 shl 13)
-        if (pressedButtons.contains(GameButton.R3)) buttonMask = buttonMask or (1 shl 14)
+        if (pressedButtons.contains(GameButton.SELECT)) buttonMask = buttonMask or (1 shl 7)
+        if (pressedButtons.contains(GameButton.START)) buttonMask = buttonMask or (1 shl 8)
+        if (pressedButtons.contains(GameButton.MENU)) buttonMask = buttonMask or (1 shl 9)
+        if (pressedButtons.contains(GameButton.HOME)) buttonMask = buttonMask or (1 shl 10)
+        if (pressedButtons.contains(GameButton.L3)) buttonMask = buttonMask or (1 shl 12)
+        if (pressedButtons.contains(GameButton.R3)) buttonMask = buttonMask or (1 shl 13)
 
         val up = pressedButtons.contains(GameButton.UP) || pressedButtons.contains(GameButton.D2_UP)
         val down = pressedButtons.contains(GameButton.DOWN) || pressedButtons.contains(GameButton.D2_DOWN)
         val left = pressedButtons.contains(GameButton.LEFT) || pressedButtons.contains(GameButton.D2_LEFT)
         val right = pressedButtons.contains(GameButton.RIGHT) || pressedButtons.contains(GameButton.D2_RIGHT)
         val hat: Byte = when {
-            up && right -> 1; down && right -> 3; down && left -> 5; up && left -> 7
-            up -> 0; right -> 2; down -> 4; left -> 6; else -> 8
+            up && right -> 1
+            down && right -> 3
+            down && left -> 5
+            up && left -> 7
+            up -> 0
+            right -> 2
+            down -> 4
+            left -> 6
+            else -> 8
         }.toByte()
 
         val axisX = (stickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
         val axisY = (stickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
         val axisZ = (rightStickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
         val axisRz = (rightStickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
-        val triggerL2 = (l2Value.coerceIn(0f, 1f) * 255f).toInt().toByte()
-        val triggerR2 = (r2Value.coerceIn(0f, 1f) * 255f).toInt().toByte()
+
+        // Treat a digital L2/R2 press as a full trigger when no analog value is supplied.
+        val effectiveL2 = if (pressedButtons.contains(GameButton.L2)) 1f else l2Value.coerceIn(0f, 1f)
+        val effectiveR2 = if (pressedButtons.contains(GameButton.R2)) 1f else r2Value.coerceIn(0f, 1f)
+        val triggerL2 = (effectiveL2 * 255f).toInt().toByte()
+        val triggerR2 = (effectiveR2 * 255f).toInt().toByte()
+
         val reportData = byteArrayOf(
-            (buttonMask and 0xFF).toByte(), ((buttonMask shr 8) and 0xFF).toByte(),
-            hat, axisX, axisY, axisZ, axisRz, triggerL2, triggerR2
+            (buttonMask and 0xFF).toByte(),
+            ((buttonMask shr 8) and 0xFF).toByte(),
+            hat,
+            axisX,
+            axisY,
+            axisZ,
+            axisRz,
+            triggerL2,
+            triggerR2
         )
         hid.sendReport(target, 1, reportData)
     }
@@ -226,16 +285,18 @@ class BluetoothHidManager(
     @SuppressLint("MissingPermission")
     private fun sendConsumerKey(target: BluetoothDevice, hid: BluetoothHidDevice, key: TvRemoteKey, pressed: Boolean) {
         var mask = 0
-        if (pressed) mask = when (key) {
-            TvRemoteKey.VOL_UP -> 1 shl 0
-            TvRemoteKey.VOL_DOWN -> 1 shl 1
-            TvRemoteKey.MUTE -> 1 shl 2
-            TvRemoteKey.PLAY_PAUSE -> 1 shl 3
-            TvRemoteKey.POWER -> 1 shl 4
-            TvRemoteKey.CH_UP -> 1 shl 5
-            TvRemoteKey.CH_DOWN -> 1 shl 6
-            TvRemoteKey.FAST_FORWARD -> 1 shl 7
-            else -> 0
+        if (pressed) {
+            mask = when (key) {
+                TvRemoteKey.VOL_UP -> 1 shl 0
+                TvRemoteKey.VOL_DOWN -> 1 shl 1
+                TvRemoteKey.MUTE -> 1 shl 2
+                TvRemoteKey.PLAY_PAUSE -> 1 shl 3
+                TvRemoteKey.POWER -> 1 shl 4
+                TvRemoteKey.CH_UP -> 1 shl 5
+                TvRemoteKey.CH_DOWN -> 1 shl 6
+                TvRemoteKey.FAST_FORWARD -> 1 shl 7
+                else -> 0
+            }
         }
         hid.sendReport(target, 2, byteArrayOf(mask.toByte()))
     }
