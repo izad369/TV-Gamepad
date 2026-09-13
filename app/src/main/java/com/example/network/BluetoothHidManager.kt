@@ -26,78 +26,95 @@ class BluetoothHidManager(
     companion object {
         private const val TAG = "BluetoothHidManager"
 
-        // Report 1 = standard Android-TV gamepad
-        // Report 2 = consumer/media controls
-        // Report 3 = keyboard-style TV navigation/numeric keys
+        // IMPORTANT: this version deliberately exposes ONE HID application only:
+        // a gamepad. There are no keyboard/media collections and no Report IDs.
+        // This avoids buggy TV HID hosts interpreting a gamepad report as
+        // keyboard shortcuts or consumer-control commands.
+        //
+        // Report layout (9 bytes, because no Report ID is declared):
+        //   byte 0-1 : 16 gamepad buttons
+        //   byte 2   : D-pad hat switch (0..7, 8 = neutral/null)
+        //   byte 3   : left stick X (-127..127)
+        //   byte 4   : left stick Y (-127..127)
+        //   byte 5   : right stick X (-127..127)
+        //   byte 6   : right stick Y (-127..127)
+        //   byte 7   : left trigger (0..255)
+        //   byte 8   : right trigger (0..255)
+        //
+        // Button usages are explicit instead of a contiguous Usage Minimum /
+        // Usage Maximum range, so Android TV sees the standard usages for
+        // A/B/X/Y/L1/R1/L3/R3 in their actual bit positions.
         val HID_REPORT_DESCRIPTOR = byteArrayOf(
-            // GAMEPAD, Report ID 1
-            0x05, 0x01, 0x09, 0x05, 0xA1.toByte(), 0x01, 0x85.toByte(), 0x01,
+            // Game Pad application collection.
+            0x05, 0x01,                         // Usage Page: Generic Desktop
+            0x09, 0x05,                         // Usage: Game Pad
+            0xA1.toByte(), 0x01,                // Collection: Application
 
-            // Button usages follow Android's documented TV game-controller mapping:
-            // A=1, B=2, X=4, Y=5, L1=7, R1=8, L3=14, R3=15.
-            // The remaining slots are custom/unused but stay inside the gamepad CA.
-            0x05, 0x09,
-            0x19, 0x01, 0x29, 0x02,
-            0x19, 0x04, 0x29, 0x05,
-            0x19, 0x03, 0x29, 0x03,
-            0x19, 0x07, 0x29, 0x08,
-            0x19, 0x09, 0x29, 0x0C,
-            0x19, 0x0D, 0x29, 0x11,
-            0x15, 0x00, 0x25, 0x01,
-            0x75, 0x01, 0x95.toByte(), 0x10,
-            0x81.toByte(), 0x02,
+            // 16 digital buttons.
+            // Bits 0..12 are used by the app; bits 13..15 are reserved.
+            0x05, 0x09,                         // Usage Page: Button
+            0x09, 0x01,                         // A
+            0x09, 0x02,                         // B
+            0x09, 0x04,                         // X
+            0x09, 0x05,                         // Y
+            0x09, 0x03,                         // Z/custom action
+            0x09, 0x07,                         // L1
+            0x09, 0x08,                         // R1
+            0x09, 0x09,                         // SELECT
+            0x09, 0x0A,                         // START
+            0x09, 0x0B,                         // HOME/custom action
+            0x09, 0x0C,                         // MENU/custom action
+            0x09, 0x0E,                         // L3
+            0x09, 0x0F,                         // R3
+            0x09, 0x10,                         // reserved
+            0x09, 0x11,                         // reserved
+            0x09, 0x12,                         // reserved
+            0x15, 0x00,                         // Logical Minimum 0
+            0x25, 0x01,                         // Logical Maximum 1
+            0x75, 0x01,                         // Report Size 1
+            0x95.toByte(), 0x10,                // Report Count 16
+            0x81.toByte(), 0x02,                // Input: Data,Var,Abs
 
-            // D-pad hat switch: logical 0..7, physical 0..315 degrees,
-            // 4-bit report with a null state for the centered position.
-            0x05, 0x01, 0x09, 0x39,
-            0x15, 0x00, 0x25, 0x07,
-            0x35, 0x00, 0x46, 0x3B, 0x01,
-            0x65, 0x14,
-            0x75, 0x04, 0x95.toByte(), 0x01,
-            0x81.toByte(), 0x42,
-            0x75, 0x04, 0x95.toByte(), 0x01,
-            0x81.toByte(), 0x03,
-
-            // Left stick X/Y and right stick Z/Rz.
+            // D-pad hat switch.
+            // Android TV expects Generic Desktop Hat Switch with a 4-bit
+            // field and a centered/null state.
             0x05, 0x01,
-            0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35,
-            0x15, 0x81.toByte(), 0x25, 0x7F,
-            0x75, 0x08, 0x95.toByte(), 0x04,
+            0x09, 0x39,                         // Hat Switch
+            0x15, 0x00,                         // Logical Minimum 0
+            0x25, 0x07,                         // Logical Maximum 7
+            0x35, 0x00,                         // Physical Minimum 0
+            0x46, 0x3B, 0x01,                   // Physical Maximum 315
+            0x65, 0x14,                         // Unit: degrees
+            0x75, 0x04,                         // Report Size 4
+            0x95.toByte(), 0x01,                // Report Count 1
+            0x81.toByte(), 0x42,                // Data,Var,Abs + Null State
+            0x75, 0x04,
+            0x95.toByte(), 0x01,
+            0x81.toByte(), 0x03,                // 4 bits padding
+
+            // Left X/Y and right Z/Rz axes.
+            0x05, 0x01,
+            0x09, 0x30,                         // X
+            0x09, 0x31,                         // Y
+            0x09, 0x32,                         // Z
+            0x09, 0x35,                         // Rz
+            0x15, 0x81.toByte(),                // Logical Minimum -127
+            0x25, 0x7F,                         // Logical Maximum 127
+            0x75, 0x08,                         // Report Size 8
+            0x95.toByte(), 0x04,                // Report Count 4
+            0x81.toByte(), 0x02,                // Data,Var,Abs
+
+            // L2/R2 analog triggers.
+            0x05, 0x02,                         // Simulation Controls
+            0x09.toByte(), 0xC5.toByte(),       // L2 / Brake
+            0x09.toByte(), 0xC4.toByte(),       // R2 / Accelerator
+            0x15, 0x00,
+            0x26, 0xFF.toByte(), 0x00,           // 0..255
+            0x75, 0x08,
+            0x95.toByte(), 0x02,
             0x81.toByte(), 0x02,
 
-            // Left/Right triggers using Android's Simulation Controls usages.
-            0x05, 0x02,
-            0x09.toByte(), 0xC5.toByte(), 0x09.toByte(), 0xC4.toByte(),
-            0x15, 0x00, 0x26, 0xFF.toByte(), 0x00,
-            0x75, 0x08, 0x95.toByte(), 0x02,
-            0x81.toByte(), 0x02,
-            0xC0.toByte(),
-
-            // CONSUMER CONTROL, Report ID 2
-            0x05, 0x0C, 0x09, 0x01, 0xA1.toByte(), 0x01, 0x85.toByte(), 0x02,
-            0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08,
-            0x09.toByte(), 0xE9.toByte(),
-            0x09.toByte(), 0xEA.toByte(),
-            0x09.toByte(), 0xE2.toByte(),
-            0x09.toByte(), 0xCD.toByte(),
-            0x09.toByte(), 0x30,
-            0x09.toByte(), 0x9C.toByte(),
-            0x09.toByte(), 0x9D.toByte(),
-            0x09.toByte(), 0xB5.toByte(),
-            0x81.toByte(), 0x02,
-            0xC0.toByte(),
-
-            // KEYBOARD, Report ID 3.
-            0x05, 0x01, 0x09, 0x06, 0xA1.toByte(), 0x01, 0x85.toByte(), 0x03,
-            0x05, 0x07, 0x19.toByte(), 0xE0.toByte(), 0x29, 0xE7.toByte(),
-            0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08,
-            0x81.toByte(), 0x02,
-            0x95.toByte(), 0x01, 0x75, 0x08, 0x81.toByte(), 0x01,
-            0x95.toByte(), 0x06, 0x75, 0x08,
-            0x15, 0x00, 0x25, 0x65,
-            0x19, 0x00, 0x29, 0x65,
-            0x81.toByte(), 0x00,
-            0xC0.toByte()
+            0xC0.toByte()                       // End Game Pad collection
         )
     }
 
@@ -143,7 +160,11 @@ class BluetoothHidManager(
     private val hidCallback = object : BluetoothHidDevice.Callback() {
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
             _isRegistered.value = registered
-            _statusMessage.value = if (registered) "HID Ready! Ready to pair with Android TV" else "HID Registration Failed"
+            _statusMessage.value = if (registered) {
+                "HID Ready! Ready to pair with Android TV"
+            } else {
+                "HID Registration Failed"
+            }
         }
 
         override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
@@ -166,7 +187,11 @@ class BluetoothHidManager(
     private fun initProfile() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
-                val success = bluetoothAdapter?.getProfileProxy(context, profileListener, BluetoothProfile.HID_DEVICE) == true
+                val success = bluetoothAdapter?.getProfileProxy(
+                    context,
+                    profileListener,
+                    BluetoothProfile.HID_DEVICE
+                ) == true
                 _isHidSupported.value = success
                 if (!success) _statusMessage.value = "Bluetooth HID not available on this phone"
             } catch (e: Exception) {
@@ -185,16 +210,17 @@ class BluetoothHidManager(
         try {
             val sdp = BluetoothHidDeviceAppSdpSettings(
                 "TV Gamepad HID",
-                "Wireless Gamepad and Remote for Android TV",
+                "Wireless Gamepad for Android TV",
                 "Android",
-                // IMPORTANT: advertise as a GAMEPAD, not as a keyboard+mouse combo.
-                // The previous COMBO subclass could make some TV HID hosts apply the
-                // wrong input interpretation even though the report descriptor was correct.
                 BluetoothHidDevice.SUBCLASS2_GAMEPAD,
                 HID_REPORT_DESCRIPTOR
             )
             val qos = BluetoothHidDeviceAppQosSettings(
-                BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT, 800, 9, 0, 11250,
+                BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
+                800,
+                9,
+                0,
+                11250,
                 BluetoothHidDeviceAppQosSettings.MAX
             )
             hid.registerApp(sdp, null, qos, executor, hidCallback)
@@ -212,13 +238,18 @@ class BluetoothHidManager(
 
     @SuppressLint("MissingPermission")
     fun sendGamepadReport(
-        pressedButtons: Set<GameButton>, stickX: Float, stickY: Float,
-        rightStickX: Float = 0f, rightStickY: Float = 0f,
-        l2Value: Float = 0f, r2Value: Float = 0f
+        pressedButtons: Set<GameButton>,
+        stickX: Float,
+        stickY: Float,
+        rightStickX: Float = 0f,
+        rightStickY: Float = 0f,
+        l2Value: Float = 0f,
+        r2Value: Float = 0f
     ) {
         val target = _connectedDevice.value ?: return
         val hid = hidDevice ?: return
 
+        // Bit positions match the explicit button usages in the descriptor.
         var buttonMask = 0
         if (pressedButtons.contains(GameButton.A)) buttonMask = buttonMask or (1 shl 0)
         if (pressedButtons.contains(GameButton.B)) buttonMask = buttonMask or (1 shl 1)
@@ -229,15 +260,16 @@ class BluetoothHidManager(
         if (pressedButtons.contains(GameButton.R1)) buttonMask = buttonMask or (1 shl 6)
         if (pressedButtons.contains(GameButton.SELECT)) buttonMask = buttonMask or (1 shl 7)
         if (pressedButtons.contains(GameButton.START)) buttonMask = buttonMask or (1 shl 8)
-        if (pressedButtons.contains(GameButton.MENU)) buttonMask = buttonMask or (1 shl 9)
-        if (pressedButtons.contains(GameButton.HOME)) buttonMask = buttonMask or (1 shl 10)
-        if (pressedButtons.contains(GameButton.L3)) buttonMask = buttonMask or (1 shl 12)
-        if (pressedButtons.contains(GameButton.R3)) buttonMask = buttonMask or (1 shl 13)
+        if (pressedButtons.contains(GameButton.HOME)) buttonMask = buttonMask or (1 shl 9)
+        if (pressedButtons.contains(GameButton.MENU)) buttonMask = buttonMask or (1 shl 10)
+        if (pressedButtons.contains(GameButton.L3)) buttonMask = buttonMask or (1 shl 11)
+        if (pressedButtons.contains(GameButton.R3)) buttonMask = buttonMask or (1 shl 12)
 
         val up = pressedButtons.contains(GameButton.UP) || pressedButtons.contains(GameButton.D2_UP)
         val down = pressedButtons.contains(GameButton.DOWN) || pressedButtons.contains(GameButton.D2_DOWN)
         val left = pressedButtons.contains(GameButton.LEFT) || pressedButtons.contains(GameButton.D2_LEFT)
         val right = pressedButtons.contains(GameButton.RIGHT) || pressedButtons.contains(GameButton.D2_RIGHT)
+
         val hat: Byte = when {
             up && right -> 1
             down && right -> 3
@@ -271,74 +303,27 @@ class BluetoothHidManager(
             triggerL2,
             triggerR2
         )
-        hid.sendReport(target, 1, reportData)
+
+        // No Report IDs are declared, so Android's BluetoothHidDevice API
+        // requires report id 0.
+        hid.sendReport(target, 0, reportData)
     }
 
-    @SuppressLint("MissingPermission")
-    private fun sendConsumerKey(target: BluetoothDevice, hid: BluetoothHidDevice, key: TvRemoteKey, pressed: Boolean) {
-        var mask = 0
-        if (pressed) {
-            mask = when (key) {
-                TvRemoteKey.VOL_UP -> 1 shl 0
-                TvRemoteKey.VOL_DOWN -> 1 shl 1
-                TvRemoteKey.MUTE -> 1 shl 2
-                TvRemoteKey.PLAY_PAUSE -> 1 shl 3
-                TvRemoteKey.POWER -> 1 shl 4
-                TvRemoteKey.CH_UP -> 1 shl 5
-                TvRemoteKey.CH_DOWN -> 1 shl 6
-                TvRemoteKey.FAST_FORWARD -> 1 shl 7
-                else -> 0
-            }
-        }
-        hid.sendReport(target, 2, byteArrayOf(mask.toByte()))
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun sendKeyboardUsage(target: BluetoothDevice, hid: BluetoothHidDevice, usage: Int, pressed: Boolean) {
-        val report = ByteArray(8)
-        if (pressed) report[2] = usage.toByte()
-        hid.sendReport(target, 3, report)
-    }
-
+    // Remote/consumer commands are intentionally disabled in this diagnostic
+    // gamepad-only build. Reintroducing them before the gamepad is verified
+    // would reintroduce the mixed-HID parsing problem we are testing for.
     @SuppressLint("MissingPermission")
     fun sendRemoteKey(key: TvRemoteKey, pressed: Boolean) {
-        val target = _connectedDevice.value ?: return
-        val hid = hidDevice ?: return
-
-        when (key) {
-            TvRemoteKey.VOL_UP, TvRemoteKey.VOL_DOWN, TvRemoteKey.MUTE,
-            TvRemoteKey.PLAY_PAUSE, TvRemoteKey.POWER, TvRemoteKey.CH_UP,
-            TvRemoteKey.CH_DOWN, TvRemoteKey.FAST_FORWARD -> sendConsumerKey(target, hid, key, pressed)
-
-            TvRemoteKey.UP -> sendKeyboardUsage(target, hid, 0x52, pressed)
-            TvRemoteKey.DOWN -> sendKeyboardUsage(target, hid, 0x51, pressed)
-            TvRemoteKey.LEFT -> sendKeyboardUsage(target, hid, 0x50, pressed)
-            TvRemoteKey.RIGHT -> sendKeyboardUsage(target, hid, 0x4F, pressed)
-            TvRemoteKey.OK -> sendKeyboardUsage(target, hid, 0x28, pressed)
-            TvRemoteKey.BACK -> sendKeyboardUsage(target, hid, 0x29, pressed)
-            TvRemoteKey.HOME -> sendKeyboardUsage(target, hid, 0x4A, pressed)
-            TvRemoteKey.MENU -> sendKeyboardUsage(target, hid, 0x65, pressed)
-            TvRemoteKey.NUM_0 -> sendKeyboardUsage(target, hid, 0x27, pressed)
-            TvRemoteKey.NUM_1 -> sendKeyboardUsage(target, hid, 0x1E, pressed)
-            TvRemoteKey.NUM_2 -> sendKeyboardUsage(target, hid, 0x1F, pressed)
-            TvRemoteKey.NUM_3 -> sendKeyboardUsage(target, hid, 0x20, pressed)
-            TvRemoteKey.NUM_4 -> sendKeyboardUsage(target, hid, 0x21, pressed)
-            TvRemoteKey.NUM_5 -> sendKeyboardUsage(target, hid, 0x22, pressed)
-            TvRemoteKey.NUM_6 -> sendKeyboardUsage(target, hid, 0x23, pressed)
-            TvRemoteKey.NUM_7 -> sendKeyboardUsage(target, hid, 0x24, pressed)
-            TvRemoteKey.NUM_8 -> sendKeyboardUsage(target, hid, 0x25, pressed)
-            TvRemoteKey.NUM_9 -> sendKeyboardUsage(target, hid, 0x26, pressed)
-            TvRemoteKey.REWIND -> sendKeyboardUsage(target, hid, 0x4C, pressed)
-            TvRemoteKey.INPUT_SOURCE -> sendKeyboardUsage(target, hid, 0x2B, pressed)
-            TvRemoteKey.SETTINGS -> sendKeyboardUsage(target, hid, 0x65, pressed)
-        }
+        Log.d(TAG, "Remote key ignored in gamepad-only HID build: $key / $pressed")
     }
 
     @SuppressLint("MissingPermission")
     fun release() {
         try {
             hidDevice?.unregisterApp()
-            if (hidDevice != null) bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hidDevice)
+            if (hidDevice != null) {
+                bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hidDevice)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error releasing HID", e)
         }
