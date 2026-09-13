@@ -26,19 +26,16 @@ class BluetoothHidManager(
     companion object {
         private const val TAG = "BluetoothHidManager"
 
-        // Android TV-compatible HID layout:
-        // Report 1 = Gamepad
-        // Report 2 = Consumer/media controls
-        // Report 3 = Keyboard-style TV navigation/numeric keys
-        // The gamepad usages below are explicitly declared instead of a generic
-        // 0x01..0x10 range so Android can map A/B/X/Y/L1/R1/L3/R3 correctly.
+        // Report 1 = standard Android-TV gamepad
+        // Report 2 = consumer/media controls
+        // Report 3 = keyboard-style TV navigation/numeric keys
         val HID_REPORT_DESCRIPTOR = byteArrayOf(
             // GAMEPAD, Report ID 1
             0x05, 0x01, 0x09, 0x05, 0xA1.toByte(), 0x01, 0x85.toByte(), 0x01,
 
-            // Buttons: A(1), B(2), Z/custom(3), X(4), Y(5),
-            // L1(7), R1(8), Select(9), Start(10), Menu(11), Home(12),
-            // unused(13), L3(14), R3(15), unused(16), unused(17).
+            // Button usages follow Android's documented TV game-controller mapping:
+            // A=1, B=2, X=4, Y=5, L1=7, R1=8, L3=14, R3=15.
+            // The remaining slots are custom/unused but stay inside the gamepad CA.
             0x05, 0x09,
             0x19, 0x01, 0x29, 0x02,
             0x19, 0x04, 0x29, 0x05,
@@ -50,8 +47,8 @@ class BluetoothHidManager(
             0x75, 0x01, 0x95.toByte(), 0x10,
             0x81.toByte(), 0x02,
 
-            // D-pad / Hat switch: logical 0..7, physical 0..315 degrees,
-            // 4-bit field with null state. This is the Android CDD mapping.
+            // D-pad hat switch: logical 0..7, physical 0..315 degrees,
+            // 4-bit report with a null state for the centered position.
             0x05, 0x01, 0x09, 0x39,
             0x15, 0x00, 0x25, 0x07,
             0x35, 0x00, 0x46, 0x3B, 0x01,
@@ -68,7 +65,7 @@ class BluetoothHidManager(
             0x75, 0x08, 0x95.toByte(), 0x04,
             0x81.toByte(), 0x02,
 
-            // Left/Right analog triggers using Android's Simulation Controls usages.
+            // Left/Right triggers using Android's Simulation Controls usages.
             0x05, 0x02,
             0x09.toByte(), 0xC5.toByte(), 0x09.toByte(), 0xC4.toByte(),
             0x15, 0x00, 0x26, 0xFF.toByte(), 0x00,
@@ -79,19 +76,18 @@ class BluetoothHidManager(
             // CONSUMER CONTROL, Report ID 2
             0x05, 0x0C, 0x09, 0x01, 0xA1.toByte(), 0x01, 0x85.toByte(), 0x02,
             0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08,
-            0x09.toByte(), 0xE9.toByte(), // Volume Up
-            0x09.toByte(), 0xEA.toByte(), // Volume Down
-            0x09.toByte(), 0xE2.toByte(), // Mute
-            0x09.toByte(), 0xCD.toByte(), // Play/Pause
-            0x09.toByte(), 0x30,          // Power
-            0x09.toByte(), 0x9C.toByte(), // Channel Up
-            0x09.toByte(), 0x9D.toByte(), // Channel Down
-            0x09.toByte(), 0xB5.toByte(), // Fast Forward / Scan Next
+            0x09.toByte(), 0xE9.toByte(),
+            0x09.toByte(), 0xEA.toByte(),
+            0x09.toByte(), 0xE2.toByte(),
+            0x09.toByte(), 0xCD.toByte(),
+            0x09.toByte(), 0x30,
+            0x09.toByte(), 0x9C.toByte(),
+            0x09.toByte(), 0x9D.toByte(),
+            0x09.toByte(), 0xB5.toByte(),
             0x81.toByte(), 0x02,
             0xC0.toByte(),
 
-            // KEYBOARD, Report ID 3. Boot-style 8-byte keyboard report:
-            // modifier, reserved, six simultaneous key slots.
+            // KEYBOARD, Report ID 3.
             0x05, 0x01, 0x09, 0x06, 0xA1.toByte(), 0x01, 0x85.toByte(), 0x03,
             0x05, 0x07, 0x19.toByte(), 0xE0.toByte(), 0x29, 0xE7.toByte(),
             0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95.toByte(), 0x08,
@@ -188,10 +184,13 @@ class BluetoothHidManager(
         val hid = hidDevice ?: return
         try {
             val sdp = BluetoothHidDeviceAppSdpSettings(
-                "TV Gamepad & Remote",
-                "Wireless Gamepad & Remote for Android TV",
+                "TV Gamepad HID",
+                "Wireless Gamepad and Remote for Android TV",
                 "Android",
-                BluetoothHidDevice.SUBCLASS1_COMBO,
+                // IMPORTANT: advertise as a GAMEPAD, not as a keyboard+mouse combo.
+                // The previous COMBO subclass could make some TV HID hosts apply the
+                // wrong input interpretation even though the report descriptor was correct.
+                BluetoothHidDevice.SUBCLASS2_GAMEPAD,
                 HID_REPORT_DESCRIPTOR
             )
             val qos = BluetoothHidDeviceAppQosSettings(
@@ -220,11 +219,6 @@ class BluetoothHidManager(
         val target = _connectedDevice.value ?: return
         val hid = hidDevice ?: return
 
-        // Match the explicit button usages in the descriptor by bit position.
-        // A=bit0(usage1), B=bit1(usage2), X=bit2(usage4), Y=bit3(usage5),
-        // Z=bit4(usage3), L1=bit5(usage7), R1=bit6(usage8),
-        // Select=bit7(usage9), Start=bit8(usage10), Menu=bit9(usage11),
-        // Home=bit10(usage12), L3=bit12(usage14), R3=bit13(usage15).
         var buttonMask = 0
         if (pressedButtons.contains(GameButton.A)) buttonMask = buttonMask or (1 shl 0)
         if (pressedButtons.contains(GameButton.B)) buttonMask = buttonMask or (1 shl 1)
@@ -261,7 +255,6 @@ class BluetoothHidManager(
         val axisZ = (rightStickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
         val axisRz = (rightStickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
 
-        // Treat a digital L2/R2 press as a full trigger when no analog value is supplied.
         val effectiveL2 = if (pressedButtons.contains(GameButton.L2)) 1f else l2Value.coerceIn(0f, 1f)
         val effectiveR2 = if (pressedButtons.contains(GameButton.R2)) 1f else r2Value.coerceIn(0f, 1f)
         val triggerL2 = (effectiveL2 * 255f).toInt().toByte()
@@ -281,7 +274,6 @@ class BluetoothHidManager(
         hid.sendReport(target, 1, reportData)
     }
 
-    // Consumer report bits: volume, mute, play/pause, power, channel and FF.
     @SuppressLint("MissingPermission")
     private fun sendConsumerKey(target: BluetoothDevice, hid: BluetoothHidDevice, key: TvRemoteKey, pressed: Boolean) {
         var mask = 0
@@ -301,8 +293,6 @@ class BluetoothHidManager(
         hid.sendReport(target, 2, byteArrayOf(mask.toByte()))
     }
 
-    // Android keyboard usages used by Android TV: arrows, Enter, Escape/Back,
-    // Home, Menu/Application and the number row. Only one key is emitted at a time.
     @SuppressLint("MissingPermission")
     private fun sendKeyboardUsage(target: BluetoothDevice, hid: BluetoothHidDevice, usage: Int, pressed: Boolean) {
         val report = ByteArray(8)
